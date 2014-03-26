@@ -6,3 +6,5 @@ Additionally, terms to include relativistic corrections (both precession
 and radiation) can be included.  Finally, a prescription exists to model
 rapid eccentricity oscillations (see Antognini et al. 2014).  This feature
 is very approximate and is unstable, however. 
+
+The integrator used is the GSL ODE integrator.
