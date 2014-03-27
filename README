@@ -8,3 +8,6 @@ rapid eccentricity oscillations (see Antognini et al. 2014).  This feature
 is very approximate and is unstable, however. 
 
 The integrator used is the GSL ODE integrator.
+
+Dependencies:
+  astroutils (https://github.com/joe-antognini/astroutils)
