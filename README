@@ -10,4 +10,4 @@ is very approximate and is unstable, however.
 The integrator used is the GSL ODE integrator.
 
 Dependencies:
-  astroutils (https://github.com/joe-antognini/astroutils)
+  astropy (http://www.astropy.org)
