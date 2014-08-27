@@ -1,11 +1,8 @@
 secular.py is a code to compute the evolution of a hierarchical triple
-system.  It includes the quadrupole, octupole, and hexadecapole terms of
-the Hamiltonian expansion, and each can be toggled.
-
-Additionally, terms to include relativistic corrections (both precession
-and radiation) can be included.  Finally, a prescription exists to model
-rapid eccentricity oscillations (see Antognini et al. 2014).  This feature
-is very approximate and is unstable, however. 
+system.  It includes the quadrupole, octupole, and hexadecapole terms of the
+Hamiltonian expansion, and each can be toggled.  Additionally, terms to
+include relativistic corrections (both precession and radiation) can be
+included.  
 
 The integrator used is the GSL ODE integrator.
 
