@@ -250,8 +250,9 @@ def deriv(t, y, in_params):
 
 def printout(t, y, m):
   '''Print out the state of the system.'''
-  print (t / unit.year).value, (y[0] / unit.au).value, y[1], y[2], 
-  print (y[3] / unit.au).value, y[4], y[5], y[6], calc_cosi(m, y)
+  print t / (unit.year / unit.s).to(1), 
+  print y[0] / const.au.value, y[1], y[2], 
+  print y[3] / const.au.value, y[4], y[5], y[6], calc_cosi(m, y)
 
 def secular(m, r, e, a, g, inc, tstop, 
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
@@ -300,13 +301,6 @@ def secular(m, r, e, a, g, inc, tstop,
 
   in_params = (input_gr, input_oct, input_hex)
 
-  # Set up the GSL integrator
-  dimension = 7
-  stepper = odeiv.step_rk8pd
-  step = stepper(dimension, lambda x, z: deriv(x, z, in_params))
-  control = odeiv.control_y_new(step, absacc, relacc)
-  evolve  = odeiv.evolve(step, control, dimension)
-
   # 0  1  2  3  4  5  6
   # a1 g1 e1 a2 g2 e2 H
   yinit = (a1, g1, e1, a2, g2, e2, calc_H(e, inc, m, a))
@@ -314,6 +308,13 @@ def secular(m, r, e, a, g, inc, tstop,
   # Initial step size is taken to be an outer period.  It will be adapted by
   # GSL.
   time_step = 2 * pi * sqrt(a2**3 / (const.G.value * (m0 + m1 + m2)))
+
+  # Set up the GSL integrator
+  dimension = len(yinit)
+  stepper = odeiv.step_rk8pd
+  step = stepper(dimension, deriv, args=in_params)
+  control = odeiv.control_y_new(step, absacc, relacc)
+  evolve  = odeiv.evolve(step, control, dimension)
 
   t = 0.
   y = yinit
@@ -363,7 +364,7 @@ def secular(m, r, e, a, g, inc, tstop,
   e = (e1, e2)
   a = (a1, a2)
   g = (g1, g2)
-  return (t, maxe, (e, a, g, calc_cosi(m, y)), merger_flag,
+  return (t, maxe, (e, a, g, calc_cosi(m, y)), merge_flag,
     exception_flag)
 
 if __name__=='__main__':
@@ -502,7 +503,7 @@ if __name__=='__main__':
   if options.endtime < 0:
     print >> sys.stderr, 'stop time must be greater than 0'
     sys.exit(1)
-  endtime = options.endtime
+  endtime = options.endtime * (unit.yr / unit.s).to(1)
   if options.cputime < 0 and options.cputime != -1:
     print >> sys.stderr, 'cputime must greater than 0 of exactly -1.'
     sys.exit(1)
@@ -529,16 +530,17 @@ if __name__=='__main__':
   print >> sys.stderr, 'Secular evolution calculation'
   print >> sys.stderr
   print >> sys.stderr, 'System parameters'
-  print >> sys.stderr, 'a1 =', a1, 'a2 =', a2
-  print >> sys.stderr, 'm0 =', m0, 'm1 =', m1, 'm2 =', m2
+  print >> sys.stderr, 'a1 =', a1 / const.au.value, 
+  print >> sys.stderr, 'a2 =', a2 / const.au.value
+  print >> sys.stderr, 'm0 =', m0 / const.M_sun.value, "M_Sun",
+  print >> sys.stderr, 'm1 =', m1 / const.M_sun.value, "M_Sun",
+  print >> sys.stderr, 'm2 =', m2 / const.M_sun.value, "M_Sun"
   print >> sys.stderr, 'e1 =', e1, 'e2 =', e2
-  print >> sys.stderr, 'g1 =', g1, 'g2 =', g2
-  print >> sys.stderr, 'inc =', inc
-  print >> sys.stderr, 't_final =', endtime, 'outfreq =', outfreq
+  print >> sys.stderr, 'g1 =', g1 * 180 / pi, 'g2 =', g2 * 180 / pi
+  print >> sys.stderr, 'inc =', inc * 180 / pi
+  print >> sys.stderr, 't_final =', endtime * (unit.s / unit.yr).to(1)
+  print >> sys.stderr, 'outfreq =', outfreq
   print >> sys.stderr, 'gc =', input_gr, 'oct =', input_oct, 'hex =', input_hex
-  print >> sys.stderr
-
-  print >> sys.stderr, endtime
   print >> sys.stderr
 
   # Parameters to give to the secular function
@@ -553,8 +555,11 @@ if __name__=='__main__':
   in_params = (outfreq, acc, (input_gr, input_oct, input_hex))
 
   # Run the secular calculation
-  t, maxe, state, merger_flag, exception_flag = secular(m, r, e, a, g, inc,
-    tstop, in_params)
+  try:
+    t, maxe, state, merger_flag, exception_flag = secular(m, r, e, a, g, inc,
+      tstop, in_params)
+  except RuntimeError:
+    pass
 
   # TODO: Recover information about the halt criterion -- did we stop
   # because of tcpu, endtime, or exception?
