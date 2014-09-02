@@ -256,8 +256,7 @@ def printout(t, y, m):
 
 def secular(m, r, e, a, g, inc, tstop, 
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
-  '''
-  Evolve a hierarchical triple system using the secular approximation.
+  '''Evolve a hierarchical triple system using the secular approximation.
   
   Input:
     m -- A tuple containing the three masses in kg (m0, m1, m2)
@@ -265,8 +264,8 @@ def secular(m, r, e, a, g, inc, tstop,
     e -- A tuple containing the eccentricities (e1, e2)
     a -- A tuple containing the semi-major axes in m (a1, a2)
     g -- A tuple containing the arguments of periapsis (g1, g2)
-    inc     -- The mutual inclination in radians
-    tstop   -- A tuple containing the stop time and the CPU stop time in sec
+    inc -- The mutual inclination in radians
+    tstop -- A tuple containing the stop time and the CPU stop time in sec
                (t_stop, t_cpu_stop)
     in_params -- A tuple containing:
       outfreq: How many steps between printing out the state
@@ -284,8 +283,8 @@ def secular(m, r, e, a, g, inc, tstop,
       -- A list containing the final state of the system, consisting of:
           o A tuple containing the eccentricities (e1, e2)
           o A tuple containing the semi-major axes in m (a1, a2)
-          o g -- A tuple containing the arguments of periapsis (g1, g2)
-          o inc -- The mutual inclination in radians
+          o g: A tuple containing the arguments of periapsis (g1, g2)
+          o inc: The mutual inclination in radians
       -- A merger flag which is True if the system merged
       -- An error flag which is True if an exception was encountered
   '''
