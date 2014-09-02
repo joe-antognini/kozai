@@ -385,8 +385,8 @@ if __name__=='__main__':
   def_m0 = 1.
   def_m1 = 1.
   def_m2 = 1.
-  def_r0 = 1.
-  def_r1 = 1.
+  def_r0 = 0.
+  def_r1 = 0.
   def_outfreq = 1
   def_absacc = 1e-13
   def_relacc = 1e-13
