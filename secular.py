@@ -15,13 +15,14 @@ import random
 import astropy.constants as const
 import astropy.units as unit
 
+G = const.G.value
+c = const.c.value
+
 def calc_H(e, i, m, a):
   '''Calculates H.  See eq. 22 of Blaes et al. (2002)'''
 
   a1, a2 = a
   e1, e2 = e
-  G = const.G.value
-  c = const.c.value
   m0, m1, m2 = m
 
   G1 = m0 * m1 * sqrt(G * a1 * (1 - e1**2) / (m0 + m1))
@@ -31,8 +32,6 @@ def calc_H(e, i, m, a):
 
 def calc_cosi(m, y):
   '''Calculates the cosine of the inclination given H.'''
-
-  G = const.G.value
 
   a1 = y[0]
   e1 = y[2]
@@ -50,8 +49,6 @@ def deriv(t, y, in_params):
 
   # Unpack the values
   a1, g1, e1, a2, g2, e2, H = y
-  G = const.G.value
-  c = const.c.value
   m0, m1, m2 = m
   input_gr, input_oct, input_hex = in_params
 
@@ -70,9 +67,6 @@ def deriv(t, y, in_params):
   else:
     C3 = 0.
 
-  if not input_gr:
-    c = np.inf
-  
   G1 = m0 * m1 * sqrt(G * a1 * (1 - e1**2) / (m0 + m1))
   G2 = (m0 + m1) * m2 * sqrt(G * a2 * (1 - e2**2) / (m0 + m1 + m2))
 
@@ -83,8 +77,10 @@ def deriv(t, y, in_params):
   A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
 
   # Eq. 11 of Blaes et al. (2002)
-  da1dt = -(64 * G**3 * m0 * m1 * (m0 + m1) / (5 * c**5 * a1**3 * 
-    sqrt((1 - e1**2)**7)) * (1 + 73 / 24. * e1**2 + 37 / 96. * e1**4))
+  da1dt = 0
+  if input_gr:
+    da1dt += -(64 * G**3 * m0 * m1 * (m0 + m1) / (5 * c**5 * a1**3 * 
+      sqrt((1 - e1**2)**7)) * (1 + 73 / 24. * e1**2 + 37 / 96. * e1**4))
 
   # Eq. 12 of Blaes et al. (2002)
   dg1dt = (6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
@@ -92,9 +88,10 @@ def deriv(t, y, in_params):
     e2 * e1 * (1 / G2 + th / G1) * (sing1 * sing2 * (A + 10 * (3 *
     th**2 - 1) * (1 - e1**2)) - 5 * th * B * cosphi) - C3 * e2 * (1 -
     e1**2) / (e1 * G1) * (10 * th * (1 - th**2) * (1 - 3 * e1**2) * sing1
-    * sing2 + cosphi * (3 * A - 10 * th**2 + 2)) + (3 / (c**2 * a1 * (1 -
-    e1**2)) * sqrt((G * (m0 + m1) / a1)**3)))
-
+    * sing2 + cosphi * (3 * A - 10 * th**2 + 2)))
+  if input_gr:
+    dg1dt += ((3 / (c**2 * a1 * (1 - e1**2)) * 
+      sqrt((G * (m0 + m1) / a1)**3)))
   if input_hex:
     dg1dt += (1 / (4096. * a2**5 * sqrt(1 - e1**2) * (m0 + m1)**5) * 45 *
       a1**3 * sqrt(a1 * G * (m0 + m1)) * (-1 / ((e2**2 - 1)**4 * sqrt(a2 *
@@ -145,10 +142,10 @@ def deriv(t, y, in_params):
   de1dt = (30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1) - C3 
     * e2 * (1 - e1**2) / G1 * (35 * cosphi * (1 - th**2) * e1**2 * sin(2 *
     g1) - 10 * th * (1 - e1**2) * (1 - th**2) * cosg1 * sing2 - A * (sing1
-    * cosg2 - th * cosg1 * sing2)) - 304 * G**3 * m0 * m1 * (m0 + m1) * e1
-    / (15 * c**4 * a1**4 * sqrt((1 - e1**2)**5)) * (1 + 121 / 304. *
-    e1**2))
-
+    * cosg2 - th * cosg1 * sing2)))
+  if input_gr:
+    de1dt += (-304 * G**3 * m0 * m1 * (m0 + m1) * e1 / (15 * c**4 * a1**4 * 
+      sqrt((1 - e1**2)**5)) * (1 + 121 / 304. * e1**2))
   if input_hex:
     de1dt += (-(315 * a1**3 * e1 * sqrt(1 - e1**2) * sqrt(a1 * G * (m0 +
     m1)) * (m0**2 - m0 * m1 + m1**2) * m2 * (2 * (2 + e1**2) * (2 + 3 *
@@ -241,9 +238,11 @@ def deriv(t, y, in_params):
       m1)**4)))
 
   # Eq. 17 of Blaes et al. (2002)
-  dHdt = (-32 * G**3 * m0**2 * m1**2 / (5 * c**5 * a1**3 * (1 - e1**2)**2) 
-    * sqrt(G * (m0 + m1) / a1) * (1 + 7 / 8. * e1**2) * (G1 + G2 * th) 
-    / H)
+  dHdt = 0
+  if input_gr:
+    dHdt += (-32 * G**3 * m0**2 * m1**2 / (5 * c**5 * a1**3 * 
+      (1 - e1**2)**2) * sqrt(G * (m0 + m1) / a1) * (1 + 7 / 8. * e1**2) * 
+      (G1 + G2 * th) / H)
 
   der = (da1dt, dg1dt, de1dt, da2dt, dg2dt, de2dt, dHdt)
   return der
@@ -310,7 +309,7 @@ def secular(m, r, e, a, g, inc, tstop,
 
   # Set up the GSL integrator
   dimension = len(yinit)
-  stepper = odeiv.step_rk8pd
+  stepper = odeiv.step_rkf45
   step = stepper(dimension, deriv, args=in_params)
   control = odeiv.control_y_new(step, absacc, relacc)
   evolve  = odeiv.evolve(step, control, dimension)
@@ -387,13 +386,13 @@ if __name__=='__main__':
   def_r0 = 0.
   def_r1 = 0.
   def_outfreq = 1
-  def_absacc = 1e-13
-  def_relacc = 1e-13
+  def_absacc = 1e-12
+  def_relacc = 1e-12
 
   def_verb = False
   def_oct = True
   def_hex = False
-  def_gr = True
+  def_gr = False
 
   # Configure the command line options
   parser = optparse.OptionParser()
@@ -539,7 +538,7 @@ if __name__=='__main__':
   print >> sys.stderr, 'inc =', inc * 180 / pi
   print >> sys.stderr, 't_final =', endtime * (unit.s / unit.yr).to(1)
   print >> sys.stderr, 'outfreq =', outfreq
-  print >> sys.stderr, 'gc =', input_gr, 'oct =', input_oct, 'hex =', input_hex
+  print >> sys.stderr, 'gr =', input_gr, 'oct =', input_oct, 'hex =', input_hex
   print >> sys.stderr
 
   # Parameters to give to the secular function
