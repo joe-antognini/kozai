@@ -284,8 +284,10 @@ def secular(m, r, e, a, g, inc, tstop,
           o A tuple containing the semi-major axes in m (a1, a2)
           o g: A tuple containing the arguments of periapsis (g1, g2)
           o inc: The mutual inclination in radians
+      -- The wall time needed to perform the calculation
       -- A merger flag which is True if the system merged
       -- An error flag which is True if an exception was encountered
+      -- A flag that is true if the system flipped
   '''
 
   # Unpack the inputs
@@ -322,6 +324,8 @@ def secular(m, r, e, a, g, inc, tstop,
   maxe = e1
   merge_flag = False
   exception_flag = False
+  flip_flag = False
+  flip_sign_init = np.sign(cos(inc))
 
   # Print the initial conditions (if we're printing at all)
   if outfreq != -1:
@@ -348,6 +352,9 @@ def secular(m, r, e, a, g, inc, tstop,
 
     if y[2] > maxe:
       maxe = y[2]
+
+    if np.sign(calc_cosi(m, y)) != flip_sign_init:
+      flip_flag = True
     
     if outfreq != -1:
       if (count % outfreq == 0):
@@ -358,12 +365,14 @@ def secular(m, r, e, a, g, inc, tstop,
       merge_flag = True
       break
 
-  printout(t, y, m)
+  if outfreq != -1:
+    printout(t, y, m)
   e = (e1, e2)
   a = (a1, a2)
   g = (g1, g2)
-  return (t, maxe, (e, a, g, calc_cosi(m, y)), merge_flag,
-    exception_flag)
+  tcpu = time.time() - stamp
+  return (t, maxe, (e, a, g, calc_cosi(m, y)), tcpu, merge_flag,
+    exception_flag, flip_flag)
 
 if __name__=='__main__':
   import optparse
@@ -506,7 +515,7 @@ if __name__=='__main__':
     print >> sys.stderr, 'cputime must greater than 0 of exactly -1.'
     sys.exit(1)
   cputime = options.cputime
-  if options.inc < -90 or options.inc > 90:
+  if options.inc < 0 or options.inc > 180:
     print >> sys.stderr, 'cosi must be between -90 and 90 degrees.'
     sys.exit(1)
   inc = options.inc * pi / 180.
@@ -554,8 +563,8 @@ if __name__=='__main__':
 
   # Run the secular calculation
   try:
-    t, maxe, state, merger_flag, exception_flag = secular(m, r, e, a, g, inc,
-      tstop, in_params)
+    t, maxe, state, tcpu, merger_flag, exception_flag, flip_flag = secular(m, 
+      r, e, a, g, inc, tstop, in_params)
   except RuntimeError:
     pass
 
@@ -570,14 +579,17 @@ if __name__=='__main__':
   # Print the results of the calculation
   print >> sys.stderr
   print >> sys.stderr, 'Calculation complete'
-  print >> sys.stderr, 't =', t
+  print >> sys.stderr, 't = %.2e yr' % (t / (unit.year / unit.s).to(1))
   print >> sys.stderr, 'maxe =', maxe
+  print >> sys.stderr, 't_cpu = %.2e s' % tcpu
 
   print >> sys.stderr, 'Merger =',
   if merger_flag:
     print >> sys.stderr, 'True'
   else:
     print >> sys.stderr, 'False'
+
+  print >> sys.stderr, "Flip =", flip_flag
 
   print >> sys.stderr, 'Exception =',
   if exception_flag:
@@ -591,3 +603,4 @@ if __name__=='__main__':
     print >> sys.stderr, endtime, time_step 
     print >> sys.stderr, 'Needed %f seconds' %( time.time() - stamp,)
       
+  print >> sys.stderr, '######'
