@@ -247,26 +247,26 @@ def deriv(t, y, in_params):
   der = (da1dt, dg1dt, de1dt, da2dt, dg2dt, de2dt, dHdt)
   return der
 
-def printout(t, y, m):
+def ts_printout(t, y, m):
   '''Print out the state of the system.'''
   print t / (unit.year / unit.s).to(1), 
   print y[0] / const.au.value, y[1], y[2], 
   print y[3] / const.au.value, y[4], y[5], y[6], calc_cosi(m, y)
 
-def secular(m, r, e, a, g, inc, tstop, 
+def triplesec_step(m, r, e, a, g, inc, tstop, 
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
   '''Evolve a hierarchical triple system using the secular approximation.
   
   Input:
-    m -- A tuple containing the three masses in kg (m0, m1, m2)
-    r -- A tuple containing the inner two radii in m (r0, r1)
-    e -- A tuple containing the eccentricities (e1, e2)
-    a -- A tuple containing the semi-major axes in m (a1, a2)
-    g -- A tuple containing the arguments of periapsis (g1, g2)
-    inc -- The mutual inclination in radians
-    tstop -- A tuple containing the stop time and the CPU stop time in sec
+    m: A tuple containing the three masses in kg (m0, m1, m2)
+    r: A tuple containing the inner two radii in m (r0, r1)
+    e: A tuple containing the eccentricities (e1, e2)
+    a: A tuple containing the semi-major axes in m (a1, a2)
+    g: A tuple containing the arguments of periapsis (g1, g2)
+    inc: The mutual inclination in radians
+    tstop: A tuple containing the stop time and the CPU stop time in sec
                (t_stop, t_cpu_stop)
-    in_params -- A tuple containing:
+    in_params: A tuple containing:
       outfreq: How many steps between printing out the state
                (-1 for no printing)
       acc: A tuple containing the accuracy targets (relacc, absacc)
@@ -329,18 +329,19 @@ def secular(m, r, e, a, g, inc, tstop,
 
   # Print the initial conditions (if we're printing at all)
   if outfreq != -1:
-    printout(t, y, m)
+    ts_printout(t, y, m)
 
   while (t < endtime):
     # Stop if the CPU time limit is reached
     if ((time.time() - stamp) >  cputime):
       if outfreq != -1:
-        printout(t, y, m)
+        ts_printout(t, y, m)
       raise RuntimeError, 'secular(): CPU time limit reached!'
 
     yprev = y[:]
 
     try:
+      # Take a step!
       t, time_step, y = evolve.apply(t, endtime, time_step, y)
     except ValueError:
       exception_flag = True
@@ -358,21 +359,34 @@ def secular(m, r, e, a, g, inc, tstop,
     
     if outfreq != -1:
       if (count % outfreq == 0):
-        printout(t, y, m)
+        ts_printout(t, y, m)
     count += 1
           
     if (y[0] * (1 - y[2]) <= r0 + r1):
       merge_flag = True
       break
 
+    ret = list(y)
+    flags = (flip_flag, merge_flag, exception_flag)
+    yield (ret.append(calc_cosi(m, y)), flags)
+
   if outfreq != -1:
-    printout(t, y, m)
+    ts_printout(t, y, m)
   e = (e1, e2)
   a = (a1, a2)
   g = (g1, g2)
   tcpu = time.time() - stamp
   return (t, maxe, (e, a, g, calc_cosi(m, y)), tcpu, merge_flag,
     exception_flag, flip_flag)
+
+def secular_evolve(m, r, e, a, g, inc, tstop, 
+  in_params=(1, (1e-13, 1e-13), (False, True, False))):
+  '''Evolve a triple and print out the endstate.  Intermediate steps can
+  optionally be printed as well.'''
+
+  for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
+    a1, g1, e1, a2, g2, e2, inc = step[0]
+
 
 if __name__=='__main__':
   import optparse
