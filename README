@@ -1,4 +1,4 @@
-secular.py is a code to compute the evolution of a hierarchical triple
+triplesec.py is a code to compute the evolution of a hierarchical triple
 system.  It includes the quadrupole, octupole, and hexadecapole terms of the
 Hamiltonian expansion, and each can be toggled.  Additionally, terms to
 include relativistic corrections (both precession and radiation) can be
