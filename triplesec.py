@@ -1,10 +1,10 @@
 #! /usr/bin/env python 
 
 #
-# secular
+# triplesec
 #
-# Numerically integrates Equations 11 -- 17 in Blaes, Lee, & Socrates
-# (2002).  Now includes the hexadecapole term.
+# Numerically integrate the orbital elements of a a hierarchical triple in
+# the secular approximation.
 #
 
 from math import sqrt, cos, sin, pi, acos
@@ -14,9 +14,12 @@ from pygsl import odeiv
 import random
 import astropy.constants as const
 import astropy.units as unit
+import json
 
 G = const.G.value
 c = const.c.value
+yr2s = 3.15576e7
+au = const.au.value
 
 def calc_H(e, i, m, a):
   '''Calculates H.  See eq. 22 of Blaes et al. (2002)'''
@@ -247,11 +250,12 @@ def deriv(t, y, in_params):
   der = (da1dt, dg1dt, de1dt, da2dt, dg2dt, de2dt, dHdt)
   return der
 
-def ts_printout(t, y, m):
+def ts_printout(vals, m):
   '''Print out the state of the system.'''
-  print t / (unit.year / unit.s).to(1), 
-  print y[0] / const.au.value, y[1], y[2], 
-  print y[3] / const.au.value, y[4], y[5], y[6], calc_cosi(m, y)
+
+  print vals[0] / yr2s,
+  print vals[1] / au, vals[2], vals[3], 
+  print vals[4] / au, vals[5], vals[6], vals[7], vals[8]
 
 def triplesec_step(m, r, e, a, g, inc, tstop, 
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
@@ -320,22 +324,15 @@ def triplesec_step(m, r, e, a, g, inc, tstop,
   y = yinit
   yprev = y[:]
   stamp = time.time()
-  count = 0
   maxe = e1
   merge_flag = False
   exception_flag = False
   flip_flag = False
   flip_sign_init = np.sign(cos(inc))
 
-  # Print the initial conditions (if we're printing at all)
-  if outfreq != -1:
-    ts_printout(t, y, m)
-
   while (t < endtime):
     # Stop if the CPU time limit is reached
     if ((time.time() - stamp) >  cputime):
-      if outfreq != -1:
-        ts_printout(t, y, m)
       raise RuntimeError, 'secular(): CPU time limit reached!'
 
     yprev = y[:]
@@ -357,52 +354,66 @@ def triplesec_step(m, r, e, a, g, inc, tstop,
     if np.sign(calc_cosi(m, y)) != flip_sign_init:
       flip_flag = True
     
-    if outfreq != -1:
-      if (count % outfreq == 0):
-        ts_printout(t, y, m)
-    count += 1
-          
     if (y[0] * (1 - y[2]) <= r0 + r1):
       merge_flag = True
       break
 
     ret = list(y)
+    ret.append(calc_cosi(m, y))
+    ret.insert(0, t)
     flags = (flip_flag, merge_flag, exception_flag)
-    yield (ret.append(calc_cosi(m, y)), flags)
-
-  if outfreq != -1:
-    ts_printout(t, y, m)
-  e = (e1, e2)
-  a = (a1, a2)
-  g = (g1, g2)
-  tcpu = time.time() - stamp
-  return (t, maxe, (e, a, g, calc_cosi(m, y)), tcpu, merge_flag,
-    exception_flag, flip_flag)
+    tcpu = time.time() - stamp
+    yield (ret, flags, tcpu)
 
 def secular_evolve(m, r, e, a, g, inc, tstop, 
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
   '''Evolve a triple and print out the endstate.  Intermediate steps can
   optionally be printed as well.'''
 
-  for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
-    a1, g1, e1, a2, g2, e2, inc = step[0]
+  json_data = {}
+  for i in range(3):
+    json_data['m' + str(i+1)] = m[i]
+  for i in range(2):
+    json_data['r' + str(i+1)] = r[i]
+    json_data['e' + str(i+1)] = e[i]
+    json_data['a' + str(i+1)] = a[i]
+    json_data['g' + str(i+1)] = g[i]
+  json_data['inc'] = inc
+  json_data['cpu_stop'] = tstop[1]
+  json_data['t_stop'] = tstop[0]
+  json_data['rel_accuracy'] = in_params[1][0]
+  json_data['abs_accuracy'] = in_params[1][1]
+  json_data['output_frequency'] = in_params[0]
+  json_data['gr_terms'] = in_params[2][0]
+  json_data['oct_terms'] = in_params[2][1]
+  json_data['hex_terms'] = in_params[2][2]
 
+  print >> sys.stderr, json.dumps(json_data, sort_keys=True, indent=2)
+
+  count = 0
+  out_freq = in_params[0]
+  for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
+    if count % out_freq == 0:
+      ts_printout(step[0], m)
+    count += 1
+
+  if outfreq != -1:
+    ts_printout(step[0], m)
 
 if __name__=='__main__':
   import optparse
   import sys
-  import astropy.constants as const
 
   # Defualt parameters
   def_a1 = 1.
   def_a2 = 10.
   def_g1 = 0.
   def_g2 = 0.
-  def_e1 = 0.
-  def_e2 = 0.
+  def_e1 = 0.1
+  def_e2 = 0.1
   def_inc = 80
-  def_endtime = 1e7
-  def_cputime = 300.
+  def_endtime = 1e4
+  def_cputime = 60.
   def_m0 = 1.
   def_m1 = 1.
   def_m2 = 1.
@@ -456,8 +467,6 @@ if __name__=='__main__':
     default=def_absacc, help = 'Absolute Accuracy [%g]' % def_absacc)
   parser.add_option('-R', '--racc', dest='relacc', type = 'float', 
     default=def_relacc, help = 'Relative Accuracy [%g]' % def_relacc)
-  parser.add_option('-v', '--verb', action='store_true', dest='verb', 
-    default = def_verb, help = 'Verbose')
   parser.add_option('--nooct', dest='oct', action='store_false',
     default = def_oct, help = 'Turn off octupole terms')
   parser.add_option('-c', '--GR', dest='gr', action='store_true', 
@@ -537,32 +546,12 @@ if __name__=='__main__':
     print >> sys.stderr, 'output frequency must be greater than zero or exactly equal to -1'
     sys.exit(1)
   outfreq = options.outfreq
-  if options.verb != 0 and options.verb != 1:
-    print >> sys.stderr, 'verbose must either be on (1) or off (0)'
-    sys.exit(1)
-  verb = options.verb
   input_oct = options.oct
   input_gr = options.gr
   input_hex = options.hex
 
   if cputime == -1:
     cputime = float('inf')
-
-  print >> sys.stderr, 'Secular evolution calculation'
-  print >> sys.stderr
-  print >> sys.stderr, 'System parameters'
-  print >> sys.stderr, 'a1 =', a1 / const.au.value, 
-  print >> sys.stderr, 'a2 =', a2 / const.au.value
-  print >> sys.stderr, 'm0 =', m0 / const.M_sun.value, "M_Sun",
-  print >> sys.stderr, 'm1 =', m1 / const.M_sun.value, "M_Sun",
-  print >> sys.stderr, 'm2 =', m2 / const.M_sun.value, "M_Sun"
-  print >> sys.stderr, 'e1 =', e1, 'e2 =', e2
-  print >> sys.stderr, 'g1 =', g1 * 180 / pi, 'g2 =', g2 * 180 / pi
-  print >> sys.stderr, 'inc =', inc * 180 / pi
-  print >> sys.stderr, 't_final =', endtime * (unit.s / unit.yr).to(1)
-  print >> sys.stderr, 'outfreq =', outfreq
-  print >> sys.stderr, 'gr =', input_gr, 'oct =', input_oct, 'hex =', input_hex
-  print >> sys.stderr
 
   # Parameters to give to the secular function
   m = (m0, m1, m2)
@@ -577,44 +566,6 @@ if __name__=='__main__':
 
   # Run the secular calculation
   try:
-    t, maxe, state, tcpu, merger_flag, exception_flag, flip_flag = secular(m, 
-      r, e, a, g, inc, tstop, in_params)
+    secular_evolve(m, r, e, a, g, inc, tstop, in_params)
   except RuntimeError:
     pass
-
-  # TODO: Recover information about the halt criterion -- did we stop
-  # because of tcpu, endtime, or exception?
-
-  e, a, g, inc = state
-  e1, e2 = e
-  a1, a2 = a
-  g1, g2 = g
-
-  # Print the results of the calculation
-  print >> sys.stderr
-  print >> sys.stderr, 'Calculation complete'
-  print >> sys.stderr, 't = %.2e yr' % (t / (unit.year / unit.s).to(1))
-  print >> sys.stderr, 'maxe =', maxe
-  print >> sys.stderr, 't_cpu = %.2e s' % tcpu
-
-  print >> sys.stderr, 'Merger =',
-  if merger_flag:
-    print >> sys.stderr, 'True'
-  else:
-    print >> sys.stderr, 'False'
-
-  print >> sys.stderr, "Flip =", flip_flag
-
-  print >> sys.stderr, 'Exception =',
-  if exception_flag:
-    print >> sys.stderr, 'True'
-  else:
-    print >> sys.stderr, 'False'
-
-  if verb == 1:
-    print >> sys.stderr, '# Using stepper %s with order %d' %(step.name(), step.order())
-    print >> sys.stderr, '# Using Control ', control.name()
-    print >> sys.stderr, endtime, time_step 
-    print >> sys.stderr, 'Needed %f seconds' %( time.time() - stamp,)
-      
-  print >> sys.stderr, '######'
