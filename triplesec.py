@@ -65,8 +65,8 @@ def deriv(t, y, in_params):
     (a1 / a2)**2)
 
   if input_oct:
-      C3 = (15 * G * m0 * m1 * m2 * (m0 - m1) / (64 * (m0 + m1)**2 * a2 * 
-        sqrt((1 - e2**2)**5)) * (a1 / a2)**3)
+    C3 = (15 * G * m0 * m1 * m2 * (m0 - m1) / (64 * (m0 + m1)**2 * a2 * 
+      sqrt((1 - e2**2)**5)) * (a1 / a2)**3)
   else:
     C3 = 0.
 
