@@ -257,6 +257,29 @@ def ts_printout(vals, m):
   print vals[1] / au, vals[2], vals[3], 
   print vals[4] / au, vals[5], vals[6], vals[7], vals[8]
 
+def ts_printjson(m, r, e, a, g, inc, tstop, in_params):
+  '''Print out the initial values in JSON format.'''
+
+  json_data = {}
+  for i in range(3):
+    json_data['m' + str(i+1)] = m[i]
+  for i in range(2):
+    json_data['r' + str(i+1)] = r[i]
+    json_data['e' + str(i+1)] = e[i]
+    json_data['a' + str(i+1)] = a[i]
+    json_data['g' + str(i+1)] = g[i]
+  json_data['inc'] = inc
+  json_data['cpu_stop'] = tstop[1]
+  json_data['t_stop'] = tstop[0]
+  json_data['rel_accuracy'] = in_params[1][0]
+  json_data['abs_accuracy'] = in_params[1][1]
+  json_data['output_frequency'] = in_params[0]
+  json_data['gr_terms'] = in_params[2][0]
+  json_data['oct_terms'] = in_params[2][1]
+  json_data['hex_terms'] = in_params[2][2]
+
+  print >> sys.stderr, json.dumps(json_data, sort_keys=True, indent=2)
+
 def triplesec_step(m, r, e, a, g, inc, tstop, 
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
   '''Evolve a hierarchical triple system using the secular approximation.
@@ -369,26 +392,8 @@ def secular_evolve(m, r, e, a, g, inc, tstop,
   in_params=(1, (1e-13, 1e-13), (False, True, False))):
   '''Evolve a triple and print out the endstate.  Intermediate steps can
   optionally be printed as well.'''
-
-  json_data = {}
-  for i in range(3):
-    json_data['m' + str(i+1)] = m[i]
-  for i in range(2):
-    json_data['r' + str(i+1)] = r[i]
-    json_data['e' + str(i+1)] = e[i]
-    json_data['a' + str(i+1)] = a[i]
-    json_data['g' + str(i+1)] = g[i]
-  json_data['inc'] = inc
-  json_data['cpu_stop'] = tstop[1]
-  json_data['t_stop'] = tstop[0]
-  json_data['rel_accuracy'] = in_params[1][0]
-  json_data['abs_accuracy'] = in_params[1][1]
-  json_data['output_frequency'] = in_params[0]
-  json_data['gr_terms'] = in_params[2][0]
-  json_data['oct_terms'] = in_params[2][1]
-  json_data['hex_terms'] = in_params[2][2]
-
-  print >> sys.stderr, json.dumps(json_data, sort_keys=True, indent=2)
+  
+  ts_printjson(m, r, e, a, g, inc, tstop, in_params)
 
   count = 0
   out_freq = in_params[0]
@@ -399,6 +404,27 @@ def secular_evolve(m, r, e, a, g, inc, tstop,
 
   if outfreq != -1:
     ts_printout(step[0], m)
+
+def ecc_extrema(m, r, e, a, g, inc, tstop, 
+  in_params=(1, (1e-13, 1e-13), (False, True, False))):
+  '''Evolve a triple and print out only steps during which there is an
+  eccentricity extremum.'''
+
+  ts_printjson(m, r, e, a, g, inc, tstop, in_params)
+
+  e_prev2 = 0.
+  e_prev  = 0.
+
+  for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
+    e = step[0][3]
+    if e_prev2 < e_prev > e:
+      ts_printout(prevstep, m)
+    elif e_prev2 > e_prev < e:
+      ts_printout(prevstep, m)
+
+    prevstep = step[0]
+    e_prev2 = e_prev
+    e_prev = e
 
 if __name__=='__main__':
   import optparse
@@ -420,8 +446,8 @@ if __name__=='__main__':
   def_r0 = 0.
   def_r1 = 0.
   def_outfreq = 1
-  def_absacc = 1e-12
-  def_relacc = 1e-12
+  def_absacc = 1e-13
+  def_relacc = 1e-13
 
   def_verb = False
   def_oct = True
