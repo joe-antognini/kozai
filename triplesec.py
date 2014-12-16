@@ -3,18 +3,21 @@
 #
 # triplesec
 #
-# Numerically integrate the orbital elements of a a hierarchical triple in
-# the secular approximation.
+# Numerically integrate the orbital elements of a hierarchical triple in the
+# secular approximation.
 #
+
+import json
+import sys
+import time
+import random
 
 from math import sqrt, cos, sin, pi, acos
 import numpy as np
-import time
 from pygsl import odeiv
-import random
+
 import astropy.constants as const
 import astropy.units as unit
-import json
 
 G = const.G.value
 c = const.c.value
@@ -42,18 +45,20 @@ def calc_cosi(m, y):
   e2 = y[5]
   H = y[6]
 
+  m0, m1, m2 = m
+
   G1 = m0 * m1 * sqrt(G * a1 * (1 - e1**2) / (m0 + m1))
   G2 = (m0 + m1) * m2 * sqrt(G * a2 * (1 - e2**2) / (m0 + m1 + m2))
 
   return (H**2 - G1**2 - G2**2) / (2 * G1 * G2)
 
-def deriv(t, y, in_params):
+def deriv(t, y, args):
   '''Compute derivatives of y at t'''
 
   # Unpack the values
   a1, g1, e1, a2, g2, e2, H = y
-  m0, m1, m2 = m
-  input_gr, input_oct, input_hex = in_params
+  m0, m1, m2 = args[0]
+  input_gr, input_oct, input_hex = args[1]
 
   # Calculate trig functions only once
   sing1 = sin(g1)
@@ -319,14 +324,14 @@ def triplesec_step(m, r, e, a, g, inc, tstop,
 
   # Unpack the inputs
   m0, m1, m2 = m
+  r0, r1 = r
   e1, e2 = e
   a1, a2 = a
   g1, g2 = g
   endtime, cputime = tstop
-  outfreq, acc, terms = in_params
+  outfreq, acc, toggle_terms = in_params
   relacc, absacc = acc
-
-  in_params = (input_gr, input_oct, input_hex)
+  input_gr, input_oct, input_hex = toggle_terms
 
   # 0  1  2  3  4  5  6
   # a1 g1 e1 a2 g2 e2 H
@@ -339,7 +344,7 @@ def triplesec_step(m, r, e, a, g, inc, tstop,
   # Set up the GSL integrator
   dimension = len(yinit)
   stepper = odeiv.step_rkf45
-  step = stepper(dimension, deriv, args=in_params)
+  step = stepper(dimension, deriv, args=[m, toggle_terms])
   control = odeiv.control_y_new(step, absacc, relacc)
   evolve  = odeiv.evolve(step, control, dimension)
 
@@ -349,14 +354,16 @@ def triplesec_step(m, r, e, a, g, inc, tstop,
   stamp = time.time()
   maxe = e1
   merge_flag = False
-  exception_flag = False
+  tcpu_flag = False
   flip_flag = False
+  exception_flag = False
   flip_sign_init = np.sign(cos(inc))
 
   while (t < endtime):
     # Stop if the CPU time limit is reached
     if ((time.time() - stamp) >  cputime):
-      raise RuntimeError, 'secular(): CPU time limit reached!'
+      tcpu_flag = True
+      break
 
     yprev = y[:]
 
@@ -384,7 +391,7 @@ def triplesec_step(m, r, e, a, g, inc, tstop,
     ret = list(y)
     ret.append(calc_cosi(m, y))
     ret.insert(0, t)
-    flags = (flip_flag, merge_flag, exception_flag)
+    flags = (flip_flag, merge_flag, tcpu_flag, exception_flag)
     tcpu = time.time() - stamp
     yield (ret, flags, tcpu)
 
@@ -396,9 +403,9 @@ def secular_evolve(m, r, e, a, g, inc, tstop,
   ts_printjson(m, r, e, a, g, inc, tstop, in_params)
 
   count = 0
-  out_freq = in_params[0]
+  outfreq = in_params[0]
   for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
-    if count % out_freq == 0:
+    if count % outfreq == 0:
       ts_printout(step[0], m)
     count += 1
 
