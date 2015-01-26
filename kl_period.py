@@ -16,6 +16,28 @@ c = const.c.value
 yr2s = 3.15576e7
 au = const.au.value
 
+def kl_period_oom(a1, a2, e2, m1, m3, m2=0):
+  '''The usual KL period formula:
+
+  t_KL = P_out^2 / P_in * (1 - e2^2)^(3/2)
+
+  Parameters:
+    a1: Inner semi-major axis in AU
+    a2: Outer semi-major axis in AU
+    e2: Outer eccentricity
+    m1: Mass of the primary of the inner binary in M_Sun
+    m3: Mass of the tertiary in M_Sun
+    m2: Mass of the secondary of the inner binary in M_Sun
+
+  Returns:
+    P: The period of KL oscillations in years.
+  '''
+
+  P_out2 = a2**3 / (m1 + m2 + m3)
+  P_in = sqrt(a1**3 / (m1 + m2))
+
+  return P_out2 / P_in * (1 - e2**2)**(3./2)
+
 def depsdh(eps, H, Th):
   '''The derivative of epsilon with respect to H.'''
 
@@ -49,8 +71,6 @@ def kl_tp_period(a1, a2, e1, e2, inc, m1, m3, g):
 
   L1toC2 = (16 * a2 * (1 - e2**2)**(3/2.) / m3 * (a2 / a1)**2 * sqrt(m1 * a1)
     / (2 * np.pi))
-
-  print L1toC2
 
   th = cos(np.pi * inc / 180)
   Th = th**2 * (1 - e1**2)
@@ -122,5 +142,6 @@ def numerical_kl_period(m, e, a, g, inc, nperiods=10, cputstop=300,
   return np.mean(periods) * (u.s / u.yr).to(1)
 
 if __name__ == '__main__':
+  print kl_period_oom(1, 100, .9, 1, 1)
   print kl_tp_period(1, 100, .05, .9, 85, 1, 1, 0)
   print numerical_kl_period([1, 1e-6, 1], [.05, .9], [1, 100], [0, 0], 85)
