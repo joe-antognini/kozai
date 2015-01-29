@@ -38,8 +38,36 @@ def kl_period_oom(a1, a2, e2, m1, m3, m2=0):
 
   return P_out2 / P_in * (1 - e2**2)**(3./2)
 
+def is_librating(e1, inc, g1):
+  '''Determine whether the triple is librating or rotating.
+
+  Parameters:
+    e1:  Inner eccentricity
+    inc: Inclination in degrees
+    g1:  Inner argument of periapsis in degrees
+
+  Returns:
+    True if librating, False if rotating.
+  '''
+
+  eps2 = 1 - e1**2
+  Th = eps2 * cos(inc * np.pi / 180)**2
+  Hhat = ((5 - 3 * eps2) * (eps2 - 3 * Th) - 15 * (1 - eps2) * (eps2 - Th) *
+    cos(2*g1*np.pi/180)) / eps2
+
+  print Hhat
+  print Th
+
+  if Hhat + 6 * Th - 2 > 0:
+    return True
+  else:
+    return False
+
 def depsdh(eps, H, Th):
   '''The derivative of epsilon with respect to H.'''
+
+  print ((3*eps**4 + eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 *
+    (1-eps**2)**2 * (eps**2 - Th)**2))
 
   return (eps**2 / (30 * (1-eps**2) * (eps**2 - Th) * sqrt(1 - (3*eps**4 +
     eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 * (1-eps**2)**2 * (eps**2 -
@@ -47,10 +75,15 @@ def depsdh(eps, H, Th):
 
 def kl_period_norm(Hhat, Th):
   zeta = 20 - Hhat + 24 * Th
-  epsmax = 1/6. * sqrt(zeta - sqrt(zeta**2 - 2160 * Th))
-  epsmin = sqrt(1/12. * (10 + Hhat + 6 * Th))
+  epsmin = 1/6. * sqrt(zeta - sqrt(zeta**2 - 2160 * Th))
 
-  return -2 * quad(depsdh, epsmin, epsmax, args=(Hhat, Th))[0]
+  # Check whether the triple is librating or rotating
+  if Hhat + 6 * Th - 2 > 0:
+    epsmax = 1/6. * sqrt(zeta - sqrt(zeta**2 - 2160 * Th))
+  else:
+    epsmax = sqrt((Hhat + 6 * Th + 10) / 12.)
+
+  return quad(depsdh, epsmin, epsmax, args=(Hhat, Th))[0]
 
 def kl_tp_period(a1, a2, e1, e2, inc, m1, m3, g):
   '''Return the Kozai period in years.
@@ -63,7 +96,7 @@ def kl_tp_period(a1, a2, e1, e2, inc, m1, m3, g):
     inc: Mutual inclination in degrees
     m1:  Mass of the inner binary in M_Sun
     m3:  Mass of the tertiary in M_Sun
-    g:   Argument of periapsis
+    g:   Argument of periapsis in degrees
 
   Returns:
     P: The period in yr
@@ -74,9 +107,13 @@ def kl_tp_period(a1, a2, e1, e2, inc, m1, m3, g):
 
   th = cos(np.pi * inc / 180)
   Th = th**2 * (1 - e1**2)
-  Hhat = (2 + 3*e1**2) * (1 - 3*th**2) - 15 * e1**2 * (1 - th**2) * cos(2 * g)
+  Hhat = ((2 + 3*e1**2) * (1 - 3*th**2) - 15 * e1**2 * (1 - th**2) * 
+    cos(2 * g * np.pi / 180))
 
-  return L1toC2 * kl_period_norm(Hhat, Th)
+  print Hhat
+  print Th
+
+  return 2 * L1toC2 * kl_period_norm(Hhat, Th)
 
 def numerical_kl_period(m, e, a, g, inc, nperiods=10, cputstop=300, 
   tstop_factor=100, in_params=(1, (1e-11, 1e-11), (False, False, False))):
@@ -85,7 +122,6 @@ def numerical_kl_period(m, e, a, g, inc, nperiods=10, cputstop=300,
 
   Input:
     m: A list containing the three masses in solar masses (m0, m1, m2)
-    r: A list containing the inner two radii in solar radii (r0, r1)
     e: A list containing the eccentricities (e1, e2)
     a: A list containing the semi-major axes in AU (a1, a2)
     g: A list containing the arguments of periapsis in degrees (g1, g2)
