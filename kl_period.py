@@ -66,8 +66,8 @@ def is_librating(e1, inc, g1):
 def depsdh(eps, H, Th):
   '''The derivative of epsilon with respect to H.'''
 
-  print ((3*eps**4 + eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 *
-    (1-eps**2)**2 * (eps**2 - Th)**2))
+#  print ((3*eps**4 + eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 *
+#    (1-eps**2)**2 * (eps**2 - Th)**2))
 
   return (eps**2 / (30 * (1-eps**2) * (eps**2 - Th) * sqrt(1 - (3*eps**4 +
     eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 * (1-eps**2)**2 * (eps**2 -
@@ -79,11 +79,11 @@ def kl_period_norm(Hhat, Th):
 
   # Check whether the triple is librating or rotating
   if Hhat + 6 * Th - 2 > 0:
-    epsmax = 1/6. * sqrt(zeta - sqrt(zeta**2 - 2160 * Th))
+    epsmax = 1/6. * sqrt(zeta + sqrt(zeta**2 - 2160 * Th))
   else:
     epsmax = sqrt((Hhat + 6 * Th + 10) / 12.)
 
-  return quad(depsdh, epsmin, epsmax, args=(Hhat, Th))[0]
+  return quad(depsdh, epsmin, epsmax, args=(Hhat, Th), epsabs=1e-13, epsrel=1e-13)[0]
 
 def kl_tp_period(a1, a2, e1, e2, inc, m1, m3, g):
   '''Return the Kozai period in years.
