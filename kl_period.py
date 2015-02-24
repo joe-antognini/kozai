@@ -66,10 +66,7 @@ def is_librating(e1, inc, g1):
 def depsdh(eps, H, Th):
   '''The derivative of epsilon with respect to H.'''
 
-#  print ((3*eps**4 + eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 *
-#    (1-eps**2)**2 * (eps**2 - Th)**2))
-
-  return (eps**2 / (30 * (1-eps**2) * (eps**2 - Th) * sqrt(1 - (3*eps**4 +
+  return (eps**2 / ((1-eps**2) * (eps**2 - Th) * sqrt(1 - (3*eps**4 +
     eps**2 * (H - 9 * Th - 5) + 15*Th)**2 / (225 * (1-eps**2)**2 * (eps**2 -
     Th)**2))))
 
@@ -113,7 +110,7 @@ def kl_tp_period(a1, a2, e1, e2, inc, m1, m3, g):
   print Hhat
   print Th
 
-  return 2 * L1toC2 * kl_period_norm(Hhat, Th)
+  return L1toC2 * kl_period_norm(Hhat, Th) / 15
 
 def numerical_kl_period(m, e, a, g, inc, nperiods=10, cputstop=300, 
   tstop_factor=100, in_params=(1, (1e-11, 1e-11), (False, False, False))):
@@ -134,7 +131,7 @@ def numerical_kl_period(m, e, a, g, inc, nperiods=10, cputstop=300,
       outfreq: How many steps between printing out the state
                (-1 for no printing)
       acc: A tuple containing the accuracy targets (relacc, absacc)
-      terms: A tuple saying what terms to include (gc, oct, hex)
+      terms: A tuple saying what terms to include (gr, oct, hex)
 
   Output:
     The average period of KL oscillations in yr.
