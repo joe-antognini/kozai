@@ -42,8 +42,8 @@ class Triple_octupole:
   yr2s = 3.15576e7
   au = const.au.value
 
-  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=90,
-    argperi=0, tstop=1e5, cputstop=300, outfreq=1):
+  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
+    argperi=0, epsoct=None, tstop=1e5, cputstop=300, outfreq=1):
 
     #
     # Given parameters
@@ -67,10 +67,15 @@ class Triple_octupole:
     self.CKL = (self.e1**2 * (1 - 5/2. * (1 - self.cosi**2) *
       np.sin(self.omega)**2))
     self.Xi = self.CKL + self.jz**2 / 2.
-    self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
+    if epsoct is None:
+      self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
+    else:
+      self.epsoct = epsoct
     self.set_x()
     self.set_fj()
     self.set_fOmega()
+
+    self.epsoct = .01
 
     #
     # Integration parameters
@@ -80,26 +85,30 @@ class Triple_octupole:
     self.tstop = tstop
     self.cputstop = cputstop
     self.outfreq = outfreq
-    self.integration_algo = 'dop853'
+    self.integration_algo = 'vode'
     self.y = [self.jz, self.Omega]
-
-    # TEST
-    self.epsoct = .01
-    self.tstop = 400
 
     #
     # Set up the integrator
     #
     self.solver = ode(self._deriv)
-    self.solver.set_integrator(self.integration_algo, nsteps=1)
-    self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct)
+    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=1e-9,
+      rtol=1e-9)
+    self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct,
+      self.Xi)
     self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def _deriv(self, t, y, epsoct):
+  def _deriv(self, t, y, epsoct, Xi):
     # Eqs. 11 of Katz (2011)
     jz, Omega = y
-    jzdot = -epsoct * self.calc_fj() * Omega
-    Omegadot = jz * self.calc_fOmega()
+    CKL = Xi - jz**2 / 2.
+    x = (3 - 3 * CKL) / (3 + 2 * CKL)
+    fj = (15 * np.pi / (128 * np.sqrt(10)) / ellipk(x) * (4 - 11 * CKL) 
+      * np.sqrt(6 + 4 * CKL))
+    fOmega = ((6 * ellipe(x) - 3 * ellipk(x)) / (4 * ellipk(x)))
+
+    jzdot = -epsoct * fj * np.sin(Omega)
+    Omegadot = jz * fOmega
 
     return [jzdot, Omegadot]
 
@@ -144,6 +153,7 @@ class Triple_octupole:
 
   def integrate(self):
     '''Integrate the triple in time.'''
+    self.printout()
     while self.t < self.tstop:
       self._step()
       if self.nstep % self.outfreq == 0:
@@ -152,12 +162,11 @@ class Triple_octupole:
   def printout(self):
     '''Print out the state of the system in the format:
 
-    time jz
+    time jz  Omega  <f_j>  <f_Omega>  x  C_KL
 
     '''
-
-    print self.t, self.jz
+    print self.t, self.jz, self.Omega, self.fj, self.fOmega, self.x, self.CKL
 
 if __name__ == '__main__':
-  triple = Triple_octupole()
+  triple = Triple_octupole(epsoct=.01, tstop=400)
   triple.integrate()
