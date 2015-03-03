@@ -44,7 +44,8 @@ class Triple_octupole:
   au = const.au.value
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, epsoct=None, tstop=1e5, cputstop=300, outfreq=1):
+    argperi=0, epsoct=None, Xi=None, chi=None, tstop=1e5, cputstop=300, 
+    outfreq=1):
 
     #
     # Given parameters
@@ -67,12 +68,20 @@ class Triple_octupole:
     # We don't use calc_CKL() at first because we need CKL to calculate Xi.
     self.CKL = (self.e1**2 * (1 - 5/2. * (1 - self.cosi**2) *
       np.sin(self.omega)**2))
-    self.Xi = self.CKL + self.jz**2 / 2.
+
+    if Xi is None:
+      self.Xi = self.CKL + self.jz**2 / 2.
+    else:
+      self.Xi = Xi
     if epsoct is None:
       self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
     else:
       self.epsoct = epsoct
-    self.chi = self.F(self.CKL) - self.epsoct * np.cos(self.Omega)
+    if chi is None:
+      self.chi = F(self.CKL) - self.epsoct * np.cos(self.Omega)
+    else:
+      self.chi = chi
+
     self.set_x()
     self.set_fj()
     self.set_fOmega()
@@ -169,30 +178,20 @@ class Triple_octupole:
     '''
     print self.t, self.jz, self.Omega, self.fj, self.fOmega, self.x, self.CKL
 
-  def _F_integrand(self, x):
-    return (ellipk(x) - 2 * ellipe(x)) / (41*x - 21) / np.sqrt(2*x + 3)
-
-  def F(self, CKL):
-    x_low = (3 - 3 * CKL) / (3 + 2 * CKL)
-    integral = quad(self._F_integrand, x_low, 1)[0]
-    return 32 * np.sqrt(3) / np.pi * integral
-
   def period(self):
     '''Analytically calculate the period of EKM oscillations.'''
 
     # First calculate the limits. 
-    CKLmin = brentq(lambda CKL: self.chi - self.epsoct - self.F(CKL), 0, self.Xi)
+    CKLmin = brentq(lambda CKL: self.chi - self.epsoct - F(CKL), 0, self.Xi)
     if self.doesflip():
       CKLmax = self.Xi
     else:
-      CKLmax = brentq(lambda CKL: self.chi + self.epsoct - self.F(CKL), 0, 1)
-
-    print CKLmin, CKLmax
+      CKLmax = brentq(lambda CKL: self.chi + self.epsoct - F(CKL), 0, 1)
 
     prefactor = 256 * np.sqrt(10) / (15 * np.pi) / self.epsoct
     P = quad(lambda CKL: (prefactor * ellipk((3 - 3*CKL)/(3 + 2*CKL)) / 
       (4 - 11*CKL) / np.sqrt(6 + 4*CKL) / np.sqrt(1 - 1/self.epsoct**2 *
-      (self.F(CKL) - self.chi)**2) / np.sqrt(2* np.fabs(self.Xi - CKL))), 
+      (F(CKL) - self.chi)**2) / np.sqrt(2* np.fabs(self.Xi - CKL))), 
       CKLmin, CKLmax, epsabs=1e-12, epsrel=1e-12, limit=100)
 
     return P[0]
@@ -208,7 +207,7 @@ class Triple_octupole:
     # C_KL < x < C_KL + j_z^2 / 2
     #
     X = np.linspace(self.CKL, self.CKL + (self.jz)**2 / 2.)
-    DeltaF = np.fabs(np.array(map(self.F, X)) - self.F(self.CKL))
+    DeltaF = np.fabs(np.array(map(F, X)) - F(self.CKL))
 
     epsoct_crit = np.max(DeltaF) / 2.
 
@@ -216,6 +215,15 @@ class Triple_octupole:
       return True
     else:
       return False
+
+def _F_integrand(x):
+  return (ellipk(x) - 2 * ellipe(x)) / (41*x - 21) / np.sqrt(2*x + 3)
+
+def F(CKL):
+  x_low = (3 - 3 * CKL) / (3 + 2 * CKL)
+  integral = quad(_F_integrand, x_low, 1)[0]
+  return 32 * np.sqrt(3) / np.pi * integral
+
 
 if __name__ == '__main__':
   triple = Triple_octupole(epsoct=.01, tstop=400)
