@@ -73,6 +73,8 @@ class Triple_octupole:
       self.Xi = self.CKL + self.jz**2 / 2.
     else:
       self.Xi = Xi
+      self.jz = 0
+      self.CKL = self.Xi
     if epsoct is None:
       self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
     else:
@@ -81,6 +83,7 @@ class Triple_octupole:
       self.chi = F(self.CKL) - self.epsoct * np.cos(self.Omega)
     else:
       self.chi = chi
+      self.Omega = np.arccos((F(self.CKL) - self.chi) / self.epsoct)
 
     self.set_x()
     self.set_fj()
@@ -173,7 +176,7 @@ class Triple_octupole:
   def printout(self):
     '''Print out the state of the system in the format:
 
-    time jz  Omega  <f_j>  <f_Omega>  x  C_KL
+    time  jz  Omega  <f_j>  <f_Omega>  x  C_KL
 
     '''
     print self.t, self.jz, self.Omega, self.fj, self.fOmega, self.x, self.CKL
