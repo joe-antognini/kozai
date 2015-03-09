@@ -32,6 +32,10 @@ class Triple_octupole:
     argperi: Argument of periastron in degrees
     longascnode: Longitude of ascending node in degrees
 
+    epsoct: e2 / (1 - e2^2) * (a1 / a2)
+    phiq: The value of the quadrupole term of the Hamiltonian
+    Xi: The other integral of motion of the octupole term
+
     tstop: The number of years for which to integrate
     cputstop: The number of CPU seconds to integrate for
     outfreq: Print out state every n steps (-1 for no output)
@@ -44,7 +48,7 @@ class Triple_octupole:
   au = const.au.value
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, epsoct=None, Xi=None, chi=None, tstop=1e5, cputstop=300, 
+    argperi=0, epsoct=None, phiq=None, Xi=None, tstop=1e5, cputstop=300, 
     outfreq=1):
 
     #
@@ -69,27 +73,25 @@ class Triple_octupole:
     self.CKL = (self.e1**2 * (1 - 5/2. * (1 - self.cosi**2) *
       np.sin(self.omega)**2))
 
-    if Xi is None:
-      self.Xi = self.CKL + self.jz**2 / 2.
+    if phiq is None:
+      self.phiq = self.CKL + self.jz**2 / 2.
     else:
-      self.Xi = Xi
+      self.phiq = phiq
       self.jz = 0
-      self.CKL = self.Xi
+      self.CKL = self.phiq
     if epsoct is None:
       self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
     else:
       self.epsoct = epsoct
-    if chi is None:
-      self.chi = F(self.CKL) - self.epsoct * np.cos(self.Omega)
+    if Xi is None:
+      self.Xi = F(self.CKL) - self.epsoct * np.cos(self.Omega)
     else:
-      self.chi = chi
-      self.Omega = np.arccos((F(self.CKL) - self.chi) / self.epsoct)
+      self.Xi = Xi
+      self.Omega = np.arccos((F(self.CKL) - self.Xi) / self.epsoct)
 
     self.set_x()
     self.set_fj()
     self.set_fOmega()
-
-    self.epsoct = .01
 
     #
     # Integration parameters
@@ -109,13 +111,13 @@ class Triple_octupole:
     self.solver.set_integrator(self.integration_algo, nsteps=1, atol=1e-9,
       rtol=1e-9)
     self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct,
-      self.Xi)
+      self.phiq)
     self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def _deriv(self, t, y, epsoct, Xi):
+  def _deriv(self, t, y, epsoct, phiq):
     # Eqs. 11 of Katz (2011)
     jz, Omega = y
-    CKL = Xi - jz**2 / 2.
+    CKL = phiq - jz**2 / 2.
     x = (3 - 3 * CKL) / (3 + 2 * CKL)
     fj = (15 * np.pi / (128 * np.sqrt(10)) / ellipk(x) * (4 - 11 * CKL) 
       * np.sqrt(6 + 4 * CKL))
@@ -143,7 +145,7 @@ class Triple_octupole:
     self.CKL = self.calc_CKL()
 
   def calc_CKL(self):
-    return self.Xi - self.jz**2 / 2.
+    return self.phiq - self.jz**2 / 2.
 
   def calc_x(self):
     return (3 - 3 * self.CKL) / (3 + 2 * self.CKL)
@@ -185,16 +187,16 @@ class Triple_octupole:
     '''Analytically calculate the period of EKM oscillations.'''
 
     # First calculate the limits. 
-    CKLmin = brentq(lambda CKL: self.chi - self.epsoct - F(CKL), 0, self.Xi)
+    CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), 0, self.phiq)
     if self.doesflip():
-      CKLmax = self.Xi
+      CKLmax = self.phiq
     else:
-      CKLmax = brentq(lambda CKL: self.chi + self.epsoct - F(CKL), 0, 1)
+      CKLmax = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), 0, 1)
 
     prefactor = 256 * np.sqrt(10) / (15 * np.pi) / self.epsoct
     P = quad(lambda CKL: (prefactor * ellipk((3 - 3*CKL)/(3 + 2*CKL)) / 
       (4 - 11*CKL) / np.sqrt(6 + 4*CKL) / np.sqrt(1 - 1/self.epsoct**2 *
-      (F(CKL) - self.chi)**2) / np.sqrt(2* np.fabs(self.Xi - CKL))), 
+      (F(CKL) - self.Xi)**2) / np.sqrt(2* np.fabs(self.phiq - CKL))), 
       CKLmin, CKLmax, epsabs=1e-12, epsrel=1e-12, limit=100)
 
     return P[0]
