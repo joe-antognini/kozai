@@ -3,6 +3,7 @@
 import numpy as np
 from math import sin, cos
 from scipy.integrate import ode, quad
+from scipy.optimize import root
 
 class Triple_vector:
   '''Evolve a triple in time using the vectorial equations of motion.'''
@@ -23,10 +24,6 @@ class Triple_vector:
     self.m3 = m3
 
     # Derived parameters
-    self.Omega_e = self.Omega + self.omega
-    self.ie = np.arcsin(cos(self.omega) / (sin(self.inc) * (cos(self.Omega
-      + self.omega) * cos(self.Omega) - sin(self.Omega + self.omega) *
-      sin(self.Omega))))
     self.j = np.sqrt(1 - self.e1**2)
 
     if epsoct is None:
@@ -35,14 +32,14 @@ class Triple_vector:
       self.epsoct = epsoct
 
     # The vectorial elements
-    self.jvec = self.j * np.array([
+    self.jhatvec = np.array([
       sin(self.inc) * sin(self.Omega),
       -sin(self.inc) * cos(self.Omega),
       cos(self.inc)])
-    self.evec = self.e1 * np.array([
-      sin(self.ie) * cos(self.Omega_e),
-      sin(self.ie) * sin(self.Omega_e),
-      cos(self.ie)])
+    self.jvec = self.j * self.jhatvec
+
+    self.ehatvec = root(_evec_root, [1, 0, 0], (self.jhatvec, self.omega))
+    self.evec = self.e1 * self.ehatvec
 
     # Elements of the potential
     self.Phi0 = 4 * np.pi**2 * self.m3 * self.a1**2 / (self.a2**3 * (1 -
@@ -136,3 +133,16 @@ class Triple_vector:
   def __exit__(self):
     self.outfile.close()
 
+def _evec_root(x, j, omega):
+  '''The set of equations that determine evec.'''
+
+  # Orthogonal to j
+  cond1 = x[0] * j[0] + x[1] * j[1] + x[2] * j[2]
+
+  # Normalized
+  cond2 = x[0]**2 + x[1]**2 + x[2]**2 - 1.
+
+  # Gives the right argument of periapsis
+  cond3 = x[0] * j[1] - x[1] * j[0] + cos(omega)
+
+  return [cond1, cond2, cond3]
