@@ -36,9 +36,12 @@ class Triple_octupole:
     phiq: The value of the quadrupole term of the Hamiltonian
     Xi: The other integral of motion of the octupole term
 
-    tstop: The number of years for which to integrate
+    tstop: The time to integrate (units of t_KL)
     cputstop: The number of CPU seconds to integrate for
     outfreq: Print out state every n steps (-1 for no output)
+    outfile: Filename to write output to (None for stdout)
+    atol: Absolute tolerance of the integrator
+    rtol: Relative tolerance of the integrator
   '''
 
   # Some useful constants
@@ -49,7 +52,7 @@ class Triple_octupole:
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
     argperi=0, epsoct=None, phiq=None, Xi=None, tstop=1e5, cputstop=300, 
-    outfreq=1):
+    outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9):
 
     #
     # Given parameters
@@ -101,15 +104,19 @@ class Triple_octupole:
     self.tstop = tstop
     self.cputstop = cputstop
     self.outfreq = outfreq
+    self.outfilename = outfilename
     self.integration_algo = 'vode'
     self.y = [self.jz, self.Omega]
+
+    if self.outfilename is not None:
+      self.outfile = open(self.outfilename, 'w')
 
     #
     # Set up the integrator
     #
     self.solver = ode(self._deriv)
-    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=1e-9,
-      rtol=1e-9)
+    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
+      rtol=rtol)
     self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct,
       self.phiq)
     self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
@@ -175,13 +182,21 @@ class Triple_octupole:
       if self.nstep % self.outfreq == 0:
         self.printout()
 
+    self.printout()
+    self.outfile.close()
+
   def printout(self):
     '''Print out the state of the system in the format:
 
     time  jz  Omega  <f_j>  <f_Omega>  x  C_KL
 
     '''
-    print self.t, self.jz, self.Omega, self.fj, self.fOmega, self.x, self.CKL
+    outstring = ' '.join(map(str, [self.t, self.jz, self.Omega, self.fj,
+      self.fOmega, self.x, self.CKL]))
+    if self.outfilename is None:
+      print outstring
+    else:
+      self.outfile.write(outstring + '\n')
 
   def period(self):
     '''Analytically calculate the period of EKM oscillations.'''
@@ -193,7 +208,7 @@ class Triple_octupole:
     else:
       CKLmax = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), 0, 1)
 
-    prefactor = 256 * np.sqrt(10) / (15 * np.pi) / self.epsoct
+    prefactor = 512 * np.sqrt(10) / (15 * np.pi) / self.epsoct
     P = quad(lambda CKL: (prefactor * ellipk((3 - 3*CKL)/(3 + 2*CKL)) / 
       (4 - 11*CKL) / np.sqrt(6 + 4*CKL) / np.sqrt(1 - 1/self.epsoct**2 *
       (F(CKL) - self.Xi)**2) / np.sqrt(2* np.fabs(self.phiq - CKL))), 
@@ -220,6 +235,9 @@ class Triple_octupole:
       return True
     else:
       return False
+
+  def __exit__(self):
+    self.outfile.close()
 
 def _F_integrand(x):
   return (ellipk(x) - 2 * ellipe(x)) / (41*x - 21) / np.sqrt(2*x + 3)
