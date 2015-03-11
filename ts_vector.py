@@ -9,8 +9,8 @@ class Triple_vector:
   '''Evolve a triple in time using the vectorial equations of motion.'''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, m1=1, m3=1, epsoct=None, phiq=None, Xi=None, tstop=1e5,
-    cputstop=300, outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9):
+    argperi=0, m1=1, m3=1, epsoct=None, tstop=1e5, cputstop=300, outfreq=1,
+    outfilename=None, atol=1e-9, rtol=1e-9):
 
     # Given parameters
     self.a1 = a1
