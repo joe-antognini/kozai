@@ -51,7 +51,7 @@ class Triple_octupole:
   au = const.au.value
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, epsoct=None, phiq=None, Xi=None, tstop=1e5, cputstop=300, 
+    argperi=0, epsoct=None, phiq=None, Xi=None, tstop=1e3, cputstop=300, 
     outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9):
 
     #
@@ -111,9 +111,7 @@ class Triple_octupole:
     if self.outfilename is not None:
       self.outfile = open(self.outfilename, 'w')
 
-    #
     # Set up the integrator
-    #
     self.solver = ode(self._deriv)
     self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
       rtol=rtol)
