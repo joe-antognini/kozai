@@ -107,6 +107,7 @@ class Triple_octupole:
     self.outfilename = outfilename
     self.integration_algo = 'vode'
     self.y = [self.jz, self.Omega]
+    self.tol = 1e-9
 
     if self.outfilename is not None:
       self.outfile = open(self.outfilename, 'w')
@@ -200,7 +201,7 @@ class Triple_octupole:
     '''Analytically calculate the period of EKM oscillations.'''
 
     # First calculate the limits. 
-    CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), 0, self.phiq)
+    CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
     if self.doesflip():
       CKLmax = self.phiq
     else:
