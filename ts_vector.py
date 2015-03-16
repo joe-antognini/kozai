@@ -9,7 +9,7 @@ class Triple_vector:
   '''Evolve a triple in time using the vectorial equations of motion.'''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, m1=1, m3=1, epsoct=None, tstop=1e5, cputstop=300, outfreq=1,
+    argperi=0, m1=1, m3=1, epsoct=None, tstop=1e3, cputstop=300, outfreq=1,
     outfilename=None, atol=1e-9, rtol=1e-9):
 
     # Given parameters
@@ -177,6 +177,26 @@ class Triple_vector:
         flip_count += 1
         self.printout()
       sign_prev = sign
+
+  def flip_period(self, nflips=3):
+    '''Return the period of flips.'''
+    sign = np.sign(self.jvec[2])
+    sign_prev = sign
+    flip_count = 0
+    fliptime_prev = 0
+    periods = []
+
+    # Integrate along...
+    while len(periods) < nflips:
+      self._step()
+      sign = np.sign(self.jvec[2])
+      if sign != sign_prev:
+        if fliptime_prev != 0:
+          periods.append(self.t - fliptime_prev)
+        fliptime_prev = self.t
+      sign_prev = sign
+
+    return np.mean(periods)
 
   def __exit__(self):
     self.outfile.close()

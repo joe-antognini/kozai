@@ -207,7 +207,7 @@ class Triple_octupole:
     else:
       CKLmax = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), 0, 1)
 
-    prefactor = 512 * np.sqrt(10) / (15 * np.pi) / self.epsoct
+    prefactor = 256 * np.sqrt(10) / (15 * np.pi) / self.epsoct
     P = quad(lambda CKL: (prefactor * ellipk((3 - 3*CKL)/(3 + 2*CKL)) / 
       (4 - 11*CKL) / np.sqrt(6 + 4*CKL) / np.sqrt(1 - 1/self.epsoct**2 *
       (F(CKL) - self.Xi)**2) / np.sqrt(2* np.fabs(self.phiq - CKL))), 
