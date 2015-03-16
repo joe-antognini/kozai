@@ -201,7 +201,13 @@ class Triple_octupole:
     '''Analytically calculate the period of EKM oscillations.'''
 
     # First calculate the limits. 
-    CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
+    xcrit = brentq(lambda x: ellipk(x) - 2 * ellipe(x), 0, 1)
+    phicrit = 3 * (1 - xcrit) / (3 + 2 * xcrit)
+
+    if self.phiq < phicrit:
+      CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
+    else:
+      CKLmin = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), phicrit, self.phiq)
     if self.doesflip():
       CKLmax = self.phiq
     else:
