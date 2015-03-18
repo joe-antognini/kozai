@@ -207,7 +207,7 @@ class Triple_octupole:
     if self.phiq < phicrit:
       CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
     else:
-      CKLmin = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), phicrit, self.phiq)
+      CKLmin = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), self.tol, self.phiq)
     if self.doesflip():
       CKLmax = self.phiq
     else:
