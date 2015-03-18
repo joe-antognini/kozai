@@ -207,7 +207,12 @@ class Triple_octupole:
     if self.phiq < phicrit:
       CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
     else:
-      CKLmin = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), self.tol, self.phiq)
+      # Check if flips occur for Omega = Pi or 0
+      if (np.sign(self.Xi - self.epsoct - F(self.tol)) != 
+          np.sign(self.Xi - self.epsoct - F(self.phiq))):
+        CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
+      else:
+        CKLmin = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), self.tol, self.phiq)
     if self.doesflip():
       CKLmax = self.phiq
     else:
