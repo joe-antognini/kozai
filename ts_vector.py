@@ -149,6 +149,48 @@ class Triple_vector:
     self.printout()
     self.outfile.close()
 
+  def ecc_extrema(self):
+    '''Integrate the triple, but only print out on eccentricity extrema.'''
+    t_prev = 0
+    e_prev = 0
+    e_prev2 = 0
+    while self.t < self.tstop:
+      self._step()
+      e = np.linalg.norm(self.evec)
+      if e_prev2 < e_prev > e:
+        outstring = ' '.join(map(str, [t_prev, e_prev]))
+        if self.outfilename is None:
+          print outstring
+        else:
+          self.outfile.write(outstring + '\n')
+      t_prev = self.t
+      e_prev2 = e_prev
+      e_prev = e
+
+    self.outfile.close()
+
+  def printflips(self):
+    '''Integrate the triple, but print out only when there is a flip.'''
+    t_prev = 0
+    e_prev = 0
+    e_prev2 = 0
+    sign_prev = np.sign(self.jvec[2])
+    while self.t < self.tstop:
+      self._step()
+      e = np.linalg.norm(self.evec)
+      if e_prev2 < e_prev > e:
+        if np.sign(self.jvec[2]) != sign_prev:
+          outstring = ' '.join(map(str, [t_prev, e_prev]))
+          if self.outfilename is None:
+            print outstring
+          else:
+            self.outfile.write(outstring + '\n')
+        sign_prev = np.sign(self.jvec[2])
+      t_prev = self.t
+      e_prev2 = e_prev
+      e_prev = e
+    self.outfile.close()
+
   def printout(self):
     '''Print out the state of the system in the format:
 

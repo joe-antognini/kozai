@@ -34,7 +34,7 @@ class Triple_octupole:
 
     epsoct: e2 / (1 - e2^2) * (a1 / a2)
     phiq: The value of the quadrupole term of the Hamiltonian
-    Xi: The other integral of motion of the octupole term
+    chi: The other integral of motion of the octupole term
 
     tstop: The time to integrate (units of t_KL)
     cputstop: The number of CPU seconds to integrate for
@@ -51,7 +51,7 @@ class Triple_octupole:
   au = const.au.value
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, epsoct=None, phiq=None, Xi=None, tstop=1e3, cputstop=300, 
+    argperi=0, epsoct=None, phiq=None, chi=None, tstop=1e3, cputstop=300, 
     outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9):
 
     #
@@ -72,7 +72,7 @@ class Triple_octupole:
     self.j = np.sqrt(1 - e1**2)
     self.jz = self.j * self.cosi
 
-    # We don't use calc_CKL() at first because we need CKL to calculate Xi.
+    # We don't use calc_CKL() at first because we need CKL to calculate chi.
     self.CKL = (self.e1**2 * (1 - 5/2. * (1 - self.cosi**2) *
       np.sin(self.omega)**2))
 
@@ -86,11 +86,11 @@ class Triple_octupole:
       self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
     else:
       self.epsoct = epsoct
-    if Xi is None:
-      self.Xi = F(self.CKL) - self.epsoct * np.cos(self.Omega)
+    if chi is None:
+      self.chi = F(self.CKL) - self.epsoct * np.cos(self.Omega)
     else:
-      self.Xi = Xi
-      self.Omega = np.arccos((F(self.CKL) - self.Xi) / self.epsoct)
+      self.chi = chi
+      self.Omega = np.arccos((F(self.CKL) - self.chi) / self.epsoct)
 
     self.set_x()
     self.set_fj()
@@ -205,26 +205,43 @@ class Triple_octupole:
     phicrit = 3 * (1 - xcrit) / (3 + 2 * xcrit)
 
     if self.phiq < phicrit:
-      CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
+      CKLmin = brentq(lambda CKL: self.chi - self.epsoct - F(CKL), self.tol, self.phiq)
     else:
       # Check if flips occur for Omega = Pi or 0
-      if (np.sign(self.Xi - self.epsoct - F(self.tol)) != 
-          np.sign(self.Xi - self.epsoct - F(self.phiq))):
-        CKLmin = brentq(lambda CKL: self.Xi - self.epsoct - F(CKL), self.tol, self.phiq)
+      if (np.sign(self.chi - self.epsoct - F(self.tol)) != 
+          np.sign(self.chi - self.epsoct - F(self.phiq))):
+        CKLmin = brentq(lambda CKL: self.chi - self.epsoct - F(CKL), self.tol, self.phiq)
       else:
-        CKLmin = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), self.tol, self.phiq)
+        CKLmin = brentq(lambda CKL: self.chi + self.epsoct - F(CKL), self.tol, self.phiq)
     if self.doesflip():
       CKLmax = self.phiq
     else:
-      CKLmax = brentq(lambda CKL: self.Xi + self.epsoct - F(CKL), 0, 1)
+      CKLmax = brentq(lambda CKL: self.chi + self.epsoct - F(CKL), 0, 1)
 
     prefactor = 256 * np.sqrt(10) / (15 * np.pi) / self.epsoct
     P = quad(lambda CKL: (prefactor * ellipk((3 - 3*CKL)/(3 + 2*CKL)) / 
       (4 - 11*CKL) / np.sqrt(6 + 4*CKL) / np.sqrt(1 - 1/self.epsoct**2 *
-      (F(CKL) - self.Xi)**2) / np.sqrt(2* np.fabs(self.phiq - CKL))), 
+      (F(CKL) - self.chi)**2) / np.sqrt(2* np.fabs(self.phiq - CKL))), 
       CKLmin, CKLmax, epsabs=1e-12, epsrel=1e-12, limit=100)
 
     return P[0]
+
+  def numeric_period(self, n_flips=3):
+    '''Calculate the period of EKM oscillations by integrating the EOMs and
+    taking the average flip time for n_flips flips.'''
+
+    t_flip_prev = 0
+    sign_prev = np.sign(self.jz)
+    periods = []
+    while (len(periods) < n_flips) and (self.t < self.tstop):
+      self._step()
+      if np.sign(self.jz) != sign_prev:
+        if t_flip_prev != 0:
+          periods.append(self.t - t_flip_prev)
+        t_flip_prev = self.t
+        sign_prev = np.sign(self.jz)
+
+    return np.mean(periods)
 
   def doesflip(self):
     '''Return True if the triple flips, false otherwise.  This is determined
