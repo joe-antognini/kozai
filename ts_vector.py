@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+import time
 import numpy as np
 from math import sin, cos
 from scipy.integrate import ode, quad
@@ -133,7 +134,10 @@ class Triple_vector:
     return list(ret)
 
   def _step(self):
+    if self.nstep == 0:
+      self.tstart = time.time()
     self.solver.integrate(self.tstop, step=True)
+    self.nstep += 1
     self.t = self.solver.t
     self.jvec = self.solver.y[:3]
     self.evec = self.solver.y[3:]
@@ -141,7 +145,9 @@ class Triple_vector:
   def integrate(self):
     '''Integrate the triple in time.'''
     self.printout()
-    while self.t < self.tstop:
+    while (self.t < self.tstop) and 
+      (time.time() - self.tstart < self.cputstop):
+
       self._step()
       if self.nstep % self.outfreq == 0:
         self.printout()
@@ -241,7 +247,11 @@ class Triple_vector:
     return np.mean(periods)
 
   def __exit__(self):
-    self.outfile.close()
+    try:
+      self.outfile.close()
+    except NameError:
+      pass
+
 
 def _evec_root(x, j, omega):
   '''The set of equations that determine evec.'''

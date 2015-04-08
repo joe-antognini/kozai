@@ -1,189 +1,275 @@
 #! /usr/bin/env python 
 
-#
-# triplesec
-#
-# Numerically integrate the orbital elements of a hierarchical triple in the
-# secular approximation.
-#
-
+# System modules
 import json
+import optparse
+import random
 import sys
 import time
-import random
 
+# Numerical modules
 from math import sqrt, cos, sin, pi, acos
 import numpy as np
-from pygsl import odeiv
+from scipy.integrate import ode, quad
+from scipy.optimize import root, fsolve
+from ts_constants import *
 
-import astropy.constants as const
-import astropy.units as unit
+class Triple:
+  '''Evolve a hierarchical triple using the Hamiltonian equations of
+  motion.'''
 
-G = const.G.value
-c = const.c.value
-yr2s = 3.15576e7
-au = const.au.value
+  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, argperi1=0, 
+    argperi2=0, m1=1, m2=1, m3=1, r1=0, r2=0, epsoct=None, tstop=1e3,
+    cputstop=300, outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9,
+    quadrupole=True, octupole=True, hexadecapole=False, gr=False,
+    integration_algo='vode', print_properties=False,
+    properties_outfilename=None):
 
-def calc_H(e, i, m, a):
-  '''Calculates H.  See eq. 22 of Blaes et al. (2002)'''
+    self.a1 = a1
+    self.a2 = a2
+    self.e1 = e1
+    self.e2 = e2
+    self.inc = inc * np.pi / 180
+    self.g1 = argperi1 * np.pi / 180
+    self.g2 = argperi2 * np.pi / 180
+    self.m1 = m1
+    self.m2 = m2
+    self.m3 = m3
+    self.r1 = r1
+    self.r2 = r2
+    self.tstop = tstop
+    self.cputstop = cputstop
+    self.outfreq = outfreq
+    self.print_properties = print_properties
+    self.properties_outfilename = properties_outfilename
 
-  a1, a2 = a
-  e1, e2 = e
-  m0, m1, m2 = m
+    # Derived parameters
+    if epsoct is None:
+      self.epsoct = self.e2 / (1 - self.e2**2) * self.a1 / self.a2
+    else:
+      self.epsoct = epsoct
+      self.e2 = None
+      self.a1 = None
+      self.a2 = None
 
-  G1 = m0 * m1 * sqrt(G * a1 * (1 - e1**2) / (m0 + m1))
-  G2 = (m0 + m1) * m2 * sqrt(G * a2 * (1 - e2**2) / (m0 + m1 + m2))
+    self.th = np.cos(self.inc)
+    self._m1 = self.m1 * M_sun
+    self._m2 = self.m2 * M_sun
+    self._m3 = self.m3 * M_sun
+    self._a1 = self.a1 * au
+    self._a2 = self.a2 * au
 
-  return sqrt(2 * cos(i) * G1 * G2 + G1**2 + G2**2)
+    self.calc_C()
+    self.update()
+    self._H = np.sqrt(2 * self._G1 * self._G2 * self.th + self._G1**2 +
+      self._G2**2)
 
-def calc_cosi(m, y):
-  '''Calculates the cosine of the inclination given H.'''
+    if outfilename is not None:
+      self.outfile = open(outfilename, 'w')
 
-  a1 = y[0]
-  e1 = y[2]
-  a2 = y[3]
-  e2 = y[5]
-  H = y[6]
+    # Integration parameters
+    self.nstep = 0
+    self.t = 0
+    self.atol = atol
+    self.rtol = rtol
+    self.collision = False # Has a collision occured?
 
-  m0, m1, m2 = m
+    self.quadrupole = quadrupole
+    self.octupole = octupole
+    self.hexadecapole = hexadecapole
+    self.gr = gr
+    if self.e2 == 0:
+      self.octupole = False
 
-  G1 = m0 * m1 * sqrt(G * a1 * (1 - e1**2) / (m0 + m1))
-  G2 = (m0 + m1) * m2 * sqrt(G * a2 * (1 - e2**2) / (m0 + m1 + m2))
+    self.integration_algo = integration_algo
+    self._y = [self._a1, self.e1, self.g1, self.e2, self.g2, self._H]
 
-  return (H**2 - G1**2 - G2**2) / (2 * G1 * G2)
+    # Set up the integrator
+    self.solver = ode(self._deriv)
+    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
+      rtol=rtol)
+    self.solver.set_initial_value(self._y, self.t).set_f_params(self.epsoct)
+    if self.integration_algo == 'vode':
+      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-def deriv(t, y, args):
-  '''Compute derivatives of y at t'''
+  def calc_cosphi(self):
+    '''Calculate the angle between periastron directions.  See Eq. 23 of
+    Blaes et al. (2002).'''
 
-  # Unpack the values
-  a1, g1, e1, a2, g2, e2, H = y
-  m0, m1, m2 = args[0]
-  input_gr, input_oct, input_hex = args[1]
+    self.cosphi = (-cos(self.g1) * cos(self.g2) - self.th * sin(self.g1) *
+      sin(self.g2))
 
-  # Calculate trig functions only once
-  sing1 = sin(g1)
-  sing2 = sin(g2)
-  cosg1 = cos(g1)
-  cosg2 = cos(g2)
+  def calc_G1(self):
+    '''Calculate G1.  See Eq. 6 of Blaes et al. (2002).'''
+    self._G1 = (self._m1 * self._m2 * np.sqrt(G * self._a1 * (1 -
+      self.e1**2) / (self._m1 + self._m2)))
 
-  C2 = (G * m0 * m1 * m2 / (16 * (m0 + m1) * a2 * sqrt((1 - e2**2)**3)) *
-    (a1 / a2)**2)
+  def calc_G2(self):
+    '''Calculate G2.  See Eq. 7 of Blaes et al. (2002).'''
+    self._G2 = ((self._m1 + self._m2) * self._m3 * np.sqrt(G * self._a2 * (1
+      - self.e2**2) / (self._m1 + self._m2 + self._m3)))
 
-  if input_oct:
-    C3 = (15 * G * m0 * m1 * m2 * (m0 - m1) / (64 * (m0 + m1)**2 * a2 * 
-      sqrt((1 - e2**2)**5)) * (a1 / a2)**3)
-  else:
-    C3 = 0.
+  def calc_C(self):
+    '''Calculate C2 and C3.  Eqs. 18 & 19 of BLaes et al. (2002)'''
 
-  G1 = m0 * m1 * sqrt(G * a1 * (1 - e1**2) / (m0 + m1))
-  G2 = (m0 + m1) * m2 * sqrt(G * a2 * (1 - e2**2) / (m0 + m1 + m2))
+    if self.quadrupole:
+      self.C2 = (G * self._m1 * self._m2 * self._m3 / (16 * (self._m1 +
+        self._m2) * self._a2 * (1 - self.e2**2)**(3./2)) * (self._a1 /
+        self._a2)**2)
+    else:
+      self.C2 = 0
 
-  th = (H**2 - G1**2 - G2**2) / (2 * G1 * G2)
-  cosphi = - cosg1 * cosg2 - th * sing1 * sing2
+    if self.octupole:
+      self.C3 = (15 * G * self._m1 * self._m2 * self._m3 * (self._m1 -
+        self._m2) / (64 * (self._m1 + self._m2)**2 * self._a2 * (1 -
+        self.e2**2)**(5./2)) * (self._a1 / self._a2)**3)
+    else:
+      self.C3 = 0
 
-  B = 2 + 5 * e1**2 - 7 * e1**2 * cos(2 * g1)
-  A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
+  def calc_th(self):
+    '''Calculate the cosine of the inclination.  See Eq. 22 of Blaes et al.
+    (2002).'''
 
-  # Eq. 11 of Blaes et al. (2002)
-  da1dt = 0
-  if input_gr:
-    da1dt += -(64 * G**3 * m0 * m1 * (m0 + m1) / (5 * c**5 * a1**3 * 
-      sqrt((1 - e1**2)**7)) * (1 + 73 / 24. * e1**2 + 37 / 96. * e1**4))
+    self.th = ((self._H**2 - self._G1**2 - self._G2**2) / (2 * self._G1 *
+      self._G2))
 
-  # Eq. 12 of Blaes et al. (2002)
-  dg1dt = (6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
-    e1**2 - th**2)) + th / G2 * (2 + e1**2 * (3 - 5 * cos(2 * g1)))) + C3 *
-    e2 * e1 * (1 / G2 + th / G1) * (sing1 * sing2 * (A + 10 * (3 *
-    th**2 - 1) * (1 - e1**2)) - 5 * th * B * cosphi) - C3 * e2 * (1 -
-    e1**2) / (e1 * G1) * (10 * th * (1 - th**2) * (1 - 3 * e1**2) * sing1
-    * sing2 + cosphi * (3 * A - 10 * th**2 + 2)))
-  if input_gr:
-    dg1dt += ((3 / (c**2 * a1 * (1 - e1**2)) * 
-      sqrt((G * (m0 + m1) / a1)**3)))
-  if input_hex:
-    dg1dt += (1 / (4096. * a2**5 * sqrt(1 - e1**2) * (m0 + m1)**5) * 45 *
-      a1**3 * sqrt(a1 * G * (m0 + m1)) * (-1 / ((e2**2 - 1)**4 * sqrt(a2 *
-      G * (m0 + m1 +m2))) * (m0**2 - m0 * m1 + m1**2) * (sqrt(1 - e2**2) *
-      m1**2 * m2 * sqrt(a2 * G * (m0 + m1 + m2)) * th + m0**2 * (sqrt( 1 -
-      e1**2) * m1 * sqrt(a1 * G * (m0 + m1)) + sqrt(1 - e2**2) * m2 *
-      sqrt(a2 * G * (m0 + m1 + m2)) * th) + m0 * m1 * (sqrt(1 - e1**2) * m1
-      * sqrt(a1 * G * (m0 + m1)) + sqrt(1 - e1**2) * sqrt(a1 * G * (m0
-      + m1)) * m2 + 2 * sqrt(1 - e2**2) * m2 * sqrt(a2 * G * (m0 + m1 +
-      m2)) * th)) * (96 * th + 480 * e1**2 * th + 180 * e1**4 * th + 144 *
-      e2**2 * th + 720 * e1**2 * e2**2 * th + 270 * e1**4 * e2**2 * th -
-      224 * th**3 - 1120 * e1**2 * th**3 - 420 * e1**4 * th**3 - 336 *
-      e2**2 * th**3 - 1680 * e1**2 * e2**2 * th**3 - 630 * e1**4 * e2**2 *
-      th**3 + 56 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) * th * (7 * th**2
-      - 4) * cos(2 * g1) - 294 * e1**4 * (2 + 3 * e2**2) * th * (th**2 - 1)
-      * cos(4 * g1) - 147 * e1**4 * e2**2 * cos(4 * g1 - 2 * g2) + 441 *
-      e1**4 * e2**2 * th**2 * cos(4 * g1 - 2 * g2) + 294 * e1**4 * e2**2 *
-      th**3 * cos(4 * g1 - 2 * g2) + 140 * e1**2 * e2**2 * cos(2 * (g1 -
-      g2)) + 70 * e1**4 * e2**2 * cos(2 * (g1 - g2)) + 336 * e1**2 * e2**3
-      * th * cos(2 * (g1 - g2)) + 168 * e1**4 * e2**2 * th * cos(2 * (g1 -
-      g2)) - 588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 - g2)) - 294 * e1**4
-      * e2**2 * th**2 * cos(2 * (g1 - g2)) - 784 * e1**2 * e2**2 * th**3 *
-      cos(2 * (g1 - g2)) - 392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 - g2))
-      - 128 * e2**2 * th * cos(2 * g2) - 640 * e1**2 * e2**2 * th * cos(2 *
-      g2) - 240 * e1**4 * e2**2 * th * cos(2 * g2) + 224 * e2**2 * th**3 *
-      cos(2 * g2) + 1120 * e1**2 * e2**2 * th**3 * cos(2 * g2) + 420 *
-      e1**4 * e2**2 * th**3 * cos(2 * g2) - 140 * e1**2 * e2**2 * cos(2 *
-      (g1 + g2)) - 70 * e1**4 * e2**2 * cos(2 * (g1 + g2)) + 336 * e1**2 *
-      e2**2 * th * cos(2 * (g1 + g2)) + 168 * e1**4 * e2**2 * th * cos(2 *
-      (g1 + g2)) + 588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 + g2)) + 294 *
-      e1**4 * e2**2 * th**2 * cos(2 * (g1 + g2)) - 784 * e1**2 * e2**2 *
-      th**3 * cos(2 * (g1 + g2)) - 392 * e1**4 * e2**2 * th**3 * cos(2 *
-      (g1 + g2)) + 147 * e1**4 * e2**2 * cos(2 * (2 * g1 + g2)) - 441 *
-      e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) + 294 * e1**4 * e2**2
-      * th**3 * cos(2 * (2 * g1 + g2))) + 1 / (e1 * sqrt((1 - e2**2)**7)) *
-      2 * (1 - e1**2) * (m0 + m1) * (m0**3 + m1**3) * m2 * (e1 * (4 + 3 *
-      e1**2) * (2 + 3 * e2**2) * (3 - 30 * th**2 + 35 * th**4) - 28 * (e1
-      + e1**3) * (2 + 3 * e2**2) * (1 - 8 * th**2 + 7 * th**4) * cos(2 *
-      g1) + 147 * e1**3 * (2 + 3 * e2**2) * (th**2 - 1)**2 * cos(4 * g1) -
-      10 * e1 * (4 + 3 * e1**2) * e2**2 * (1 - 8 * th**2 + 7 * th**4) *
-      cos(2 * g2) + 28 * (e1 + e1**3) * e2**2 * ((1 + th)**2 * (1 - 7 * th
-      + 7 * th**2) * cos(2 * (g1 - g2)) + (th - 1)**2 * (1 + 7 * th + 7 *
-      th**2) * cos(2 * (g1 + g2))) - 147 * e1**3 * e2**2 * (th**2 - 1) *
-      ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (th - 1)**2 * cos(2 * (2 * g1 +
-      g2))))))
+  def calc_cosi(self):
+    '''Calculate cos i.  A synonym for calc_th.'''
+    self.calc_th()
 
-  # Eq. 13 of Blaes et al. (2002)
-  de1dt = (30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1) - C3 
-    * e2 * (1 - e1**2) / G1 * (35 * cosphi * (1 - th**2) * e1**2 * sin(2 *
-    g1) - 10 * th * (1 - e1**2) * (1 - th**2) * cosg1 * sing2 - A * (sing1
-    * cosg2 - th * cosg1 * sing2)))
-  if input_gr:
-    de1dt += (-304 * G**3 * m0 * m1 * (m0 + m1) * e1 / (15 * c**4 * a1**4 * 
-      sqrt((1 - e1**2)**5)) * (1 + 121 / 304. * e1**2))
-  if input_hex:
-    de1dt += (-(315 * a1**3 * e1 * sqrt(1 - e1**2) * sqrt(a1 * G * (m0 +
-    m1)) * (m0**2 - m0 * m1 + m1**2) * m2 * (2 * (2 + e1**2) * (2 + 3 *
-    e2**2) * (1 - 8 * th**2 + 7 * th**4) * sin(2 * g1) - 21 * e1**2 * (2 +
-    3 * e2**2) * (th**2 - 1)**2 * sin(4 * g1) + e2**2 * (21 * e1**2 * (th -
-    1) * (1 + th)**3 * sin(4 * g1 - 2 * g2) - 2 * (2 + e1**2) * (1 + th)**2
-    * (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) - (th - 1)**2 * (2 * (2
-    + e1**2) * (1 + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) - 21 * e1**2 *
-    (th**2 - 1) * sin(2 * (2 * g1 + g2)))))) / (2048 * a2**5 * sqrt((1 -
-    e2**2)**7) * (m0 + m1)**3))
+  def update(self):
+    '''Update the derived parameters of the triple after a step.'''
+    self.calc_C()
+    self.calc_cosphi()
+    self.calc_th()
+    self.calc_G1()
+    self.calc_G2()
 
-  da2dt = 0.
-  
-  dg2dt = (3 * C2 * (2 * th / G1 * (2 + e1**2 * (3 - 5 * cos(2 * g1))) + 1
-      / G2 * (4 + 6 * e1**2 + (5 * th**2 - 3) * (2 + 3 * e1**2 - 5 * e1**2 *
-      cos(2 * g1))))) 
-  if e2 != 0:
-    dg2dt += (-C3 * e1 * sing1 * sing2 * ((4 * e2**2 + 1) / (e2 * G2) * 10 * 
-      th * (1 - th**2) * (1 - e1**2) - e2 * (1 / G1 + th / G2) * (A + 10 * 
-      (3 * th**2 - 1) * (1 - e1**2))) - C3 * e1 * cosphi * (5 * B * th * 
-      e2 * (1 / G1 + th / G2) + (4 * e2**2 + 1) / (e2 * G2) * A))
+  def _deriv(self, t, y):
+    '''The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002).'''
 
-    if input_hex:
+    # Unpack the values
+    a1, e1, g1, e2, g2, H = y
+
+    # Calculate trig functions only once
+    sing1 = sin(g1)
+    sing2 = sin(g2)
+    cosg1 = cos(g1)
+    cosg2 = cos(g2)
+
+    m1 = self._m1
+    m2 = self._m2
+    m3 = self._m3
+    a2 = self._a2
+    th = self.th
+    B = 2 + 5 * e1**2 - 7 * e1**2 * cos(2 * g1)
+    A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
+
+    # Eq. 11 of Blaes et al. (2002)
+    da1dt = 0
+    if self.gr:
+      da1dt += -(64 * G**3 * m1 * m2 * (m1 + m2) / (5 * c**5 * a1**3 * 
+        sqrt((1 - e1**2)**7)) * (1 + 73 / 24. * e1**2 + 37 / 96. * e1**4))
+
+    # Eq. 12 of Blaes et al. (2002)
+    dg1dt = 0
+    if self.quadrupole:
+      dg1dt += (6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
+        e1**2 - th**2)) + th / G2 * (2 + e1**2 * (3 - 5 * cos(2 * g1)))))
+    if self.octupole:
+      dg1dt += (C3 * e2 * e1 * (1 / G2 + th / G1) * (sing1 * sing2 * 
+        (A + 10 * (3 * th**2 - 1) * (1 - e1**2)) - 5 * th * B * cosphi) - C3
+        * e2 * (1 - e1**2) / (e1 * G1) * (10 * th * (1 - th**2) * (1 - 3 *
+        e1**2) * sing1 * sing2 + cosphi * (3 * A - 10 * th**2 + 2)))
+    if self.gr:
+      dg1dt += ((3 / (c**2 * a1 * (1 - e1**2)) * 
+        sqrt((G * (m1 + m2) / a1)**3)))
+    if self.hexadecapole:
+      dg1dt += (1 / (4096. * a2**5 * sqrt(1 - e1**2) * (m1 + m2)**5) * 45 *
+        a1**3 * sqrt(a1 * G * (m1 + m2)) * (-1 / ((e2**2 - 1)**4 * sqrt(a2 *
+        G * (m1 + m2 + m3))) * (m1**2 - m1 * m2 + m2**2) * (sqrt(1 - e2**2) *
+        m2**2 * m3 * sqrt(a2 * G * (m1 + m2 + m3)) * th + m1**2 * (sqrt( 1 -
+        e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) + sqrt(1 - e2**2) * m3 *
+        sqrt(a2 * G * (m1 + m2 + m3)) * th) + m1 * m2 * (sqrt(1 - e1**2) * m2
+        * sqrt(a1 * G * (m1 + m2)) + sqrt(1 - e1**2) * sqrt(a1 * G * (m1
+        + m2)) * m3 + 2 * sqrt(1 - e2**2) * m3 * sqrt(a2 * G * (m1 + m2 +
+        m3)) * th)) * (96 * th + 480 * e1**2 * th + 180 * e1**4 * th + 144 *
+        e2**2 * th + 720 * e1**2 * e2**2 * th + 270 * e1**4 * e2**2 * th -
+        224 * th**3 - 1120 * e1**2 * th**3 - 420 * e1**4 * th**3 - 336 *
+        e2**2 * th**3 - 1680 * e1**2 * e2**2 * th**3 - 630 * e1**4 * e2**2 *
+        th**3 + 56 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) * th * (7 * th**2
+        - 4) * cos(2 * g1) - 294 * e1**4 * (2 + 3 * e2**2) * th * (th**2 - 1)
+        * cos(4 * g1) - 147 * e1**4 * e2**2 * cos(4 * g1 - 2 * g2) + 441 *
+        e1**4 * e2**2 * th**2 * cos(4 * g1 - 2 * g2) + 294 * e1**4 * e2**2 *
+        th**3 * cos(4 * g1 - 2 * g2) + 140 * e1**2 * e2**2 * cos(2 * (g1 -
+        g2)) + 70 * e1**4 * e2**2 * cos(2 * (g1 - g2)) + 336 * e1**2 * e2**3
+        * th * cos(2 * (g1 - g2)) + 168 * e1**4 * e2**2 * th * cos(2 * (g1 -
+        g2)) - 588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 - g2)) - 294 * e1**4
+        * e2**2 * th**2 * cos(2 * (g1 - g2)) - 784 * e1**2 * e2**2 * th**3 *
+        cos(2 * (g1 - g2)) - 392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 - g2))
+        - 128 * e2**2 * th * cos(2 * g2) - 640 * e1**2 * e2**2 * th * cos(2 *
+        g2) - 240 * e1**4 * e2**2 * th * cos(2 * g2) + 224 * e2**2 * th**3 *
+        cos(2 * g2) + 1120 * e1**2 * e2**2 * th**3 * cos(2 * g2) + 420 *
+        e1**4 * e2**2 * th**3 * cos(2 * g2) - 140 * e1**2 * e2**2 * cos(2 *
+        (g1 + g2)) - 70 * e1**4 * e2**2 * cos(2 * (g1 + g2)) + 336 * e1**2 *
+        e2**2 * th * cos(2 * (g1 + g2)) + 168 * e1**4 * e2**2 * th * cos(2 *
+        (g1 + g2)) + 588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 + g2)) + 294 *
+        e1**4 * e2**2 * th**2 * cos(2 * (g1 + g2)) - 784 * e1**2 * e2**2 *
+        th**3 * cos(2 * (g1 + g2)) - 392 * e1**4 * e2**2 * th**3 * cos(2 *
+        (g1 + g2)) + 147 * e1**4 * e2**2 * cos(2 * (2 * g1 + g2)) - 441 *
+        e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) + 294 * e1**4 * e2**2
+        * th**3 * cos(2 * (2 * g1 + g2))) + 1 / (e1 * sqrt((1 - e2**2)**7)) *
+        2 * (1 - e1**2) * (m1 + m2) * (m1**3 + m2**3) * m3 * (e1 * (4 + 3 *
+        e1**2) * (2 + 3 * e2**2) * (3 - 30 * th**2 + 35 * th**4) - 28 * (e1
+        + e1**3) * (2 + 3 * e2**2) * (1 - 8 * th**2 + 7 * th**4) * cos(2 *
+        g1) + 147 * e1**3 * (2 + 3 * e2**2) * (th**2 - 1)**2 * cos(4 * g1) -
+        10 * e1 * (4 + 3 * e1**2) * e2**2 * (1 - 8 * th**2 + 7 * th**4) *
+        cos(2 * g2) + 28 * (e1 + e1**3) * e2**2 * ((1 + th)**2 * (1 - 7 * th
+        + 7 * th**2) * cos(2 * (g1 - g2)) + (th - 1)**2 * (1 + 7 * th + 7 *
+        th**2) * cos(2 * (g1 + g2))) - 147 * e1**3 * e2**2 * (th**2 - 1) *
+        ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (th - 1)**2 * cos(2 * (2 * g1 +
+        g2))))))
+
+    # Eq. 13 of Blaes et al. (2002)
+    de1dt = 0
+    if self.quadrupole:
+      de1dt += (30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1))
+    if self.octupole:
+      de1dt += (-C3 * e2 * (1 - e1**2) / G1 * (35 * cosphi * (1 - th**2) * 
+        e1**2 * sin(2 * g1) - 10 * th * (1 - e1**2) * (1 - th**2) * 
+        cosg1 * sing2 - A * (sing1 * cosg2 - th * cosg1 * sing2)))
+    if self.gr:
+      de1dt += (-304 * G**3 * m1 * m2 * (m1 + m2) * e1 / (15 * c**4 * a1**4 * 
+        sqrt((1 - e1**2)**5)) * (1 + 121 / 304. * e1**2))
+    if self.hexadecapole:
+      de1dt += (-(315 * a1**3 * e1 * sqrt(1 - e1**2) * sqrt(a1 * G * (m1 +
+      m2)) * (m1**2 - m1 * m2 + m2**2) * m3 * (2 * (2 + e1**2) * (2 + 3 *
+      e2**2) * (1 - 8 * th**2 + 7 * th**4) * sin(2 * g1) - 21 * e1**2 * (2 +
+      3 * e2**2) * (th**2 - 1)**2 * sin(4 * g1) + e2**2 * (21 * e1**2 * (th -
+      1) * (1 + th)**3 * sin(4 * g1 - 2 * g2) - 2 * (2 + e1**2) * (1 + th)**2
+      * (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) - (th - 1)**2 * (2 * (2
+      + e1**2) * (1 + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) - 21 * e1**2 *
+      (th**2 - 1) * sin(2 * (2 * g1 + g2)))))) / (2048 * a2**5 * sqrt((1 -
+      e2**2)**7) * (m1 + m2)**3))
+
+    dg2dt = 0
+    if self.quadrupole:
+      dg2dt += (3 * C2 * (2 * th / G1 * (2 + e1**2 * (3 - 5 * cos(2 * g1))) + 1
+        / G2 * (4 + 6 * e1**2 + (5 * th**2 - 3) * (2 + 3 * e1**2 - 5 * e1**2 *
+        cos(2 * g1))))) 
+    if self.octupole:
+      dg2dt += (-C3 * e1 * sing1 * sing2 * ((4 * e2**2 + 1) / (e2 * G2) * 10 * 
+        th * (1 - th**2) * (1 - e1**2) - e2 * (1 / G1 + th / G2) * (A + 10 * 
+        (3 * th**2 - 1) * (1 - e1**2))) - C3 * e1 * cosphi * (5 * B * th * 
+        e2 * (1 / G1 + th / G2) + (4 * e2**2 + 1) / (e2 * G2) * A))
+    if self.hexadecapole:
       dg2dt += ((9 * a1**3 * (-1 / sqrt(1 - e1**2) * 10 * a2 * sqrt(a1 * G *
-      (m0 + m1)) * (m0**2 - m0 * m1 + m1**2) * (sqrt(1 - e2**2) * m1**2 * m2
-      * sqrt(a2 * G * (m0 + m1 + m2)) + m0**2 * (sqrt(1 - e2**2) * m2 *
-      sqrt(a2 * G * (m0 + m1 + m2)) + sqrt(1 - e1**2) * m1 * sqrt(a1 * G *
-      (m0 + m1)) * th) + m0 * m1 * (2 * sqrt(1 - e2**2) * m2 * sqrt(a2 * G *
-      (m0 + m1 + m2)) + sqrt(1 - e1**2) * m1 * sqrt(a1 * G * (m0 + m1)) * th
-      + sqrt(1 - e1**2) * sqrt(a1 * G * (m0 + m1)) * m2 * th)) * (96 * th +
+      (m1 + m2)) * (m1**2 - m1 * m2 + m2**2) * (sqrt(1 - e2**2) * m2**2 * m3
+      * sqrt(a2 * G * (m1 + m2 + m3)) + m1**2 * (sqrt(1 - e2**2) * m3 *
+      sqrt(a2 * G * (m1 + m2 + m3)) + sqrt(1 - e1**2) * m2 * sqrt(a1 * G *
+      (m1 + m2)) * th) + m1 * m2 * (2 * sqrt(1 - e2**2) * m3 * sqrt(a2 * G *
+      (m1 + m2 + m3)) + sqrt(1 - e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) * th
+      + sqrt(1 - e1**2) * sqrt(a1 * G * (m1 + m2)) * m3 * th)) * (96 * th +
       480 * e1**2 * th + 180 * e1**4 * th + 144 * e2**2 * th + 720 * e1**2 *
       e2**2 * th + 270 * e1**4 * e2**2 * th - 224 * th**3 - 1120 * e1**2 *
       th**3 - 420 * e1**4 * th**3 - 336 * e2**2 * th**3 - 1680 * e1**2 *
@@ -208,8 +294,8 @@ def deriv(t, y, args):
       e1**2 * e2**2 * th**3 * cos(2 * (g1 + g2)) - 392 * e1**4 * e2**2 *
       th**3 * cos(2 * (g1 + g2)) + 147 * e1**4 * e2**2 * cos(2 * (2 * g1 +
       g2)) - 441 * e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) + 294 *
-      e1**4 * e2**2 * th**3 * cos(2 * (2 * g1 + g2))) + a1 * a2 * G * m0 * m1
-      * (m0**3 + m1**3) * (m0 + m1 + m2) * (-6 * (8 + 40 * e1**2 + 15 *
+      e1**4 * e2**2 * th**3 * cos(2 * (2 * g1 + g2))) + a1 * a2 * G * m1 * m2
+      * (m1**3 + m2**3) * (m1 + m2 + m3) * (-6 * (8 + 40 * e1**2 + 15 *
       e1**4) * (-1 + e2**2) * (3 - 30 * th**2 + 35 * th**4) + 7 * (8 + 40 *
       e1**2 + 15 * e1**4) * (2 + 3 * e2**2) * (3 - 30 * th**2 + 35 * th**4)
       + 840 * e1**2 * (2 + e1**2) * (-1 + e2**2) * (1 - 8 * th**2 + 7 *
@@ -227,378 +313,213 @@ def deriv(t, y, args):
       * (-1 + th) * (1 + th) * ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (-1 +
       th)**2 * cos(2 * (2 * g1 + g2))) - 5145 * e1**4 * e2**2 * (-1 + th**2)
       * ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (-1 + th)**2 * cos(2 * (2 * g1
-      + g2)))))) / (8192 * a2**6 * (-1 + e2**2)**4 * (m0 + m1)**5 * sqrt(a2 *
-      G * (m0 + m1 + m2))))
+      + g2)))))) / (8192 * a2**6 * (-1 + e2**2)**4 * (m1 + m2)**5 * sqrt(a2 *
+      G * (m1 + m2 + m3))))
 
-  # Eq. 16 of Blaes et al. (2002)
-  de2dt = (C3 * e1 * (1 - e2**2) / G2 * (10 * th * (1 - th**2) * (1 -
-    e1**2) * sing1 * cosg2 + A * (cosg1 * sing2 - th * sing1 * cosg2)))
+    # Eq. 16 of Blaes et al. (2002)
+    de2dt = 0
+    if self.octupole:
+      de2dt += (C3 * e1 * (1 - e2**2) / G2 * (10 * th * (1 - th**2) * (1 -
+      e1**2) * sing1 * cosg2 + A * (cosg1 * sing2 - th * sing1 * cosg2)))
+    if self.hexadecapole:
+      de2dt += ((45 * a1**4 * e2 * m1 * m2 * (m1**2 - m1 * m2 + m2**2) *
+        sqrt(a2 * G * (m1 + m2 + m3)) * (-147 * e1**4 * (-1 + th) * (1 +
+        th)**3 * sin(4 * g1 - 2 * g2) + 28 * e1**2 * (2 + e1**2) * (1 +
+        th)**2 * (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) + (-1 + th) *
+        (2 * (8 + 40 * e1**2 + 15 * e1**4) * (-1 - th + 7 * th**2 + 7 *
+        th**3) * sin(2 * g2) - 7 * e1**2 * (-1 + th) * (4 * (2 + e1**2) * (1
+        + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) - 21 * e1**2 * (-1 + th**2)
+        * sin(2 * (2 * g1 + g2))))) / (4096 * a2**6 * (-1 + e2**2)**3 * (m1 +
+        m2)**4)))
 
-  if input_hex:
-    de2dt += ((45 * a1**4 * e2 * m0 * m1 * (m0**2 - m0 * m1 + m1**2) *
-      sqrt(a2 * G * (m0 + m1 + m2)) * (-147 * e1**4 * (-1 + th) * (1 +
-      th)**3 * sin(4 * g1 - 2 * g2) + 28 * e1**2 * (2 + e1**2) * (1 +
-      th)**2 * (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) + (-1 + th) *
-      (2 * (8 + 40 * e1**2 + 15 * e1**4) * (-1 - th + 7 * th**2 + 7 *
-      th**3) * sin(2 * g2) - 7 * e1**2 * (-1 + th) * (4 * (2 + e1**2) * (1
-      + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) - 21 * e1**2 * (-1 + th**2)
-      * sin(2 * (2 * g1 + g2))))) / (4096 * a2**6 * (-1 + e2**2)**3 * (m0 +
-      m1)**4)))
+    # Eq. 17 of Blaes et al. (2002)
+    dHdt = 0
+    if self.gr:
+      dHdt += (-32 * G**3 * m1**2 * m2**2 / (5 * c**5 * a1**3 * 
+        (1 - e1**2)**2) * sqrt(G * (m1 + m2) / a1) * (1 + 7 / 8. * e1**2) * 
+        (G1 + G2 * th) / H)
 
-  # Eq. 17 of Blaes et al. (2002)
-  dHdt = 0
-  if input_gr:
-    dHdt += (-32 * G**3 * m0**2 * m1**2 / (5 * c**5 * a1**3 * 
-      (1 - e1**2)**2) * sqrt(G * (m0 + m1) / a1) * (1 + 7 / 8. * e1**2) * 
-      (G1 + G2 * th) / H)
+    der = (da1dt, dg1dt, de1dt, dg2dt, de2dt, dHdt)
+    return der
 
-  der = (da1dt, dg1dt, de1dt, da2dt, dg2dt, de2dt, dHdt)
-  return der
+  def _step(self):
+    if self.nstep == 0:
+      self.tstart = time.time()
+    self.solver.integrate(self.tstop, step=True)
+    self.nstep += 1
+    self.t = self.solver.t
+    self.a1, self.e1, self.g1, self.e2, self.g2 = y
+    self.g1 %= (2 * np.pi)
+    self.g2 %= (2 * np.pi)
+    self.update()
 
-def ts_printout(vals, m):
-  '''Print out the state of the system.'''
+  def integrate(self):
+    '''Integrate the triple in time.'''
+    self.printout()
+    while (self.t < self.tstop) and 
+      ((time.time() - self.tstart) < self.cputstop):
 
-  print vals[0] / yr2s,
-  print vals[1] / au, vals[2], vals[3], 
-  print vals[4] / au, vals[5], vals[6], vals[7], vals[8]
+      self._step()
+      if self.nstep % self.outfreq == 0:
+        self.printout()
 
-def ts_printjson(m, r, e, a, g, inc, tstop, in_params):
-  '''Print out the initial values in JSON format.'''
+      if self.a1 * (1 - self.e1) < self.r1 + self.r2:
+        self.collision = True
+        break
 
-  json_data = {}
-  for i in range(3):
-    json_data['m' + str(i+1)] = m[i]
-  for i in range(2):
-    json_data['r' + str(i+1)] = r[i]
-    json_data['e' + str(i+1)] = e[i]
-    json_data['a' + str(i+1)] = a[i]
-    json_data['g' + str(i+1)] = g[i]
-  json_data['inc'] = inc
-  json_data['cpu_stop'] = tstop[1]
-  json_data['t_stop'] = tstop[0]
-  json_data['rel_accuracy'] = in_params[1][0]
-  json_data['abs_accuracy'] = in_params[1][1]
-  json_data['output_frequency'] = in_params[0]
-  json_data['gr_terms'] = in_params[2][0]
-  json_data['oct_terms'] = in_params[2][1]
-  json_data['hex_terms'] = in_params[2][2]
+    self.printout()
+    self.outfile.close()
 
-  print >> sys.stderr, json.dumps(json_data, sort_keys=True, indent=2)
+  def ecc_extrema(self):
+    '''Integrate the triple, but only print out on eccentricity extrema.'''
+    t_prev = 0
+    e_prev = 0
+    e_prev2 = 0
+    while self.t < self.tstop:
+      self._step()
+      if e_prev2 < e_prev > self.e1:
+        outstring = ' '.join(map(str, [t_prev, e_prev]))
+        if self.outfilename is None:
+          print outstring
+        else:
+          self.outfile.write(outstring + '\n')
+      t_prev = self.t
+      e_prev2 = e_prev
+      e_prev = self.e1
 
-def triplesec_step(m, r, e, a, g, inc, tstop, 
-  in_params=(1, (1e-13, 1e-13), (False, True, False))):
-  '''Evolve a hierarchical triple system using the secular approximation.
+  def printflips(self):
+    '''Integrate the triple, but print out only when there is a flip.'''
+    t_prev = 0
+    e_prev = 0
+    e_prev2 = 0
+    sign_prev = np.sign(self.th)
+    while self.t < self.tstop:
+      self._step()
+      if e_prev2 < e_prev > self.e1:
+        if np.sign(self.th) != sign_prev:
+          outstring = ' '.join(map(str, [t_prev, e_prev]))
+          if self.outfilename is None:
+            print outstring
+          else:
+            self.outfile.write(outstring + '\n')
+        sign_prev = np.sign(self.th)
+      t_prev = self.t
+      e_prev2 = e_prev
+      e_prev = e
+    self.outfile.close()
+
+  def ts_printout(self):
+    '''Print out the state of the system in the format:
+      
+      t  a1  e1  g1  e2  g2  cosi
+      
+    '''
+
+    cosi = np.acos(self.th) * 180 / np.pi
+    outstring = ' '.join([self.t/yr2s, self.a1/au, self.e1, self.g1,
+      self.e2, self.g2, cosi])
+
+    if self.outfilename is None:
+      print outstring
+    else:
+      self.outfile.write(outstring + '\n')
+
+  def ts_printjson(self):
+    '''Print out the initial values in JSON format.'''
+
+    json_data = self.__dict__
+    outstring = json.dumps(json_data, sort_keys=True, indent=2)
+    if self.properties_outfilename is None:
+      print >> sys.stderr, outstring
+    else:
+      with open(self.properties_outfilename, 'w') as p_outfile:
+        p_outfile.write(outstring)
+
+def process_command_line(argv):
+  '''Process the command line.'''
   
-  Input:
-    m: A tuple containing the three masses in kg (m0, m1, m2)
-    r: A tuple containing the inner two radii in m (r0, r1)
-    e: A tuple containing the eccentricities (e1, e2)
-    a: A tuple containing the semi-major axes in m (a1, a2)
-    g: A tuple containing the arguments of periapsis (g1, g2)
-    inc: The mutual inclination in radians
-    tstop: A tuple containing the stop time and the CPU stop time in sec
-               (t_stop, t_cpu_stop)
-    in_params: A tuple containing:
-      outfreq: How many steps between printing out the state
-               (-1 for no printing)
-      acc: A tuple containing the accuracy targets (relacc, absacc)
-      terms: A tuple saying what terms to include (gc, oct, hex)
-
-  Output:
-    If outfreq is n, where in is not -1, the function will print the state
-    of the system every n steps to stdout.
-
-    The function will return a tuple containing:
-      -- The final time
-      -- The maximum eccentricity over the run
-      -- A list containing the final state of the system, consisting of:
-          o A tuple containing the eccentricities (e1, e2)
-          o A tuple containing the semi-major axes in m (a1, a2)
-          o g: A tuple containing the arguments of periapsis (g1, g2)
-          o inc: The mutual inclination in radians
-      -- The wall time needed to perform the calculation
-      -- A merger flag which is True if the system merged
-      -- An error flag which is True if an exception was encountered
-      -- A flag that is true if the system flipped
-  '''
-
-  # Unpack the inputs
-  m0, m1, m2 = m
-  r0, r1 = r
-  e1, e2 = e
-  a1, a2 = a
-  g1, g2 = g
-  endtime, cputime = tstop
-  outfreq, acc, toggle_terms = in_params
-  relacc, absacc = acc
-  input_gr, input_oct, input_hex = toggle_terms
-
-  # 0  1  2  3  4  5  6
-  # a1 g1 e1 a2 g2 e2 H
-  yinit = (a1, g1, e1, a2, g2, e2, calc_H(e, inc, m, a))
-
-  # Initial step size is taken to be an outer period.  It will be adapted by
-  # GSL.
-  time_step = 2 * pi * sqrt(a2**3 / (const.G.value * (m0 + m1 + m2)))
-
-  # Set up the GSL integrator
-  dimension = len(yinit)
-  stepper = odeiv.step_rkf45
-  step = stepper(dimension, deriv, args=[m, toggle_terms])
-  control = odeiv.control_y_new(step, absacc, relacc)
-  evolve  = odeiv.evolve(step, control, dimension)
-
-  t = 0.
-  y = yinit
-  yprev = y[:]
-  stamp = time.time()
-  maxe = e1
-  merge_flag = False
-  tcpu_flag = False
-  flip_flag = False
-  exception_flag = False
-  flip_sign_init = np.sign(cos(inc))
-
-  while (t < endtime):
-    # Stop if the CPU time limit is reached
-    if ((time.time() - stamp) >  cputime):
-      tcpu_flag = True
-      break
-
-    yprev = y[:]
-
-    try:
-      # Take a step!
-      t, time_step, y = evolve.apply(t, endtime, time_step, y)
-    except ValueError:
-      exception_flag = True
-      y = yprev[:] # the current y might be nonsensical
-      break
-
-    y[1] = y[1] % (2 * pi)
-    y[4] = y[4] % (2 * pi)
-
-    if y[2] > maxe:
-      maxe = y[2]
-
-    if np.sign(calc_cosi(m, y)) != flip_sign_init:
-      flip_flag = True
-    
-    if (y[0] * (1 - y[2]) <= r0 + r1):
-      merge_flag = True
-      break
-
-    ret = list(y)
-    ret.append(calc_cosi(m, y))
-    ret.insert(0, t)
-    flags = (flip_flag, merge_flag, tcpu_flag, exception_flag)
-    tcpu = time.time() - stamp
-    yield (ret, flags, tcpu)
-
-def secular_evolve(m, r, e, a, g, inc, tstop, 
-  in_params=(1, (1e-13, 1e-13), (False, True, False))):
-  '''Evolve a triple and print out the endstate.  Intermediate steps can
-  optionally be printed as well.'''
-  
-  ts_printjson(m, r, e, a, g, inc, tstop, in_params)
-
-  count = 0
-  outfreq = in_params[0]
-  for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
-    if count % outfreq == 0:
-      ts_printout(step[0], m)
-    count += 1
-
-  if outfreq != -1:
-    ts_printout(step[0], m)
-
-def ecc_extrema(m, r, e, a, g, inc, tstop, 
-  in_params=(1, (1e-13, 1e-13), (False, True, False))):
-  '''Evolve a triple and print out only steps during which there is an
-  eccentricity extremum.'''
-
-  ts_printjson(m, r, e, a, g, inc, tstop, in_params)
-
-  e_prev2 = 0.
-  e_prev  = 0.
-
-  for step in triplesec_step(m, r, e, a, g, inc, tstop, in_params):
-    e = step[0][3]
-    if e_prev2 < e_prev > e:
-      ts_printout(prevstep, m)
-    elif e_prev2 > e_prev < e:
-      ts_printout(prevstep, m)
-
-    prevstep = step[0]
-    e_prev2 = e_prev
-    e_prev = e
-
-if __name__=='__main__':
-  import optparse
-  import sys
-
-  # Defualt parameters
-  def_a1 = 1.
-  def_a2 = 10.
-  def_g1 = 0.
-  def_g2 = 0.
-  def_e1 = 0.1
-  def_e2 = 0.1
-  def_inc = 80
-  def_endtime = 1e4
-  def_cputime = 60.
-  def_m0 = 1.
-  def_m1 = 1.
-  def_m2 = 1.
-  def_r0 = 0.
-  def_r1 = 0.
-  def_outfreq = 1
-  def_absacc = 1e-13
-  def_relacc = 1e-13
-
-  def_verb = False
-  def_oct = True
-  def_hex = False
-  def_gr = False
+  if argv is None:
+    argv = sys.argv[1:]
 
   # Configure the command line options
-  parser = optparse.OptionParser()
-  parser.add_option('-m', '--m00', dest='m0', type = 'float', default=def_m0,
-    help = 'Mass of star 1 in inner binary in solar masses [%g]' % def_m0)
-  parser.add_option('-n', '--m01', dest='m1', type = 'float', default=def_m1,
-    help = 'Mass of star 2 in inner binary in solar masses [%g]' % def_m1)
-  parser.add_option('-o', '--m1', dest='m2', type = 'float', default=def_m2,
-    help = 'Mass of tertiary in solar masses [%g]' % def_m2)
-  parser.add_option('-r', '--r00', dest='r0', type = 'float', default=def_r0,
-    help = 'Radius of star 1 of the inner binary in R_Sun [%g]' % def_r0)
-  parser.add_option('-s', '--r01', dest='r1', type = 'float', default=def_r1,
-    help = 'Radius of star 2 of the inner binary in R_Sun [%g]' % def_r1)
-  parser.add_option('-a', '--a00', dest='a1', type='float', default=def_a1,
-    help = 'Inner semi-major axis in au [%g]' % def_a1)
-  parser.add_option('-b', '--a0', dest='a2', type='float', default=def_a2, 
-    help = 'Outer semi-major axis in au [%g]' % def_a2)
-  parser.add_option('-g', '--g00', dest='g1', type='float', default=def_g1,
-    help = 'Inner argument of periapsis in degrees [%g]' % def_g1)
-  parser.add_option('-G', '--g0', dest='g2', type='float', default=def_g2,
-    help = 'Outer argument of periapsis in degrees [%g]' % def_g2)
-  parser.add_option('-e', '--e00', dest='e1', type='float', default=def_e1,
-    help = 'Inner eccentricity [%g]' % def_e1)
-  parser.add_option('-f', '--e0', dest='e2', type='float', default=def_e2,
-    help = 'Outer eccentricity [%g]' % def_e2)
-  parser.add_option('-i', '--inc', dest='inc', type='float',
-    default=def_inc, help = 'Inclination of the third body in degrees [%g]' %
-    def_inc)
-  parser.add_option('-t', '--end', dest='endtime', type='float', 
-    default=def_endtime, help = 'Total time of integration in years [%g]' 
-    % def_endtime)
-  parser.add_option('-C', '--cpu', dest='cputime', type='float', 
-    default=def_cputime, help = 
-    'cpu time limit in seconds, if -1 then no limit [%g]' % def_cputime)
-  parser.add_option('-F', '--freq', dest='outfreq', type = 'int', 
-    default=def_outfreq, help = 'Output frequency [%g]' % def_outfreq)
-  parser.add_option('-A', '--aacc', dest='absacc', type = 'float', 
-    default=def_absacc, help = 'Absolute Accuracy [%g]' % def_absacc)
-  parser.add_option('-R', '--racc', dest='relacc', type = 'float', 
-    default=def_relacc, help = 'Relative Accuracy [%g]' % def_relacc)
-  parser.add_option('--nooct', dest='oct', action='store_false',
-    default = def_oct, help = 'Turn off octupole terms')
-  parser.add_option('-c', '--GR', dest='gr', action='store_true', 
-    default = def_gr, help = 'Turn on general relativity terms')
-  parser.add_option('-x', '--hex', dest='hex', action='store_true',
-    default = def_hex, help = 'Turn on hexadecapole terms')
+  parser = argparse.ArgumentParser()
 
-  # Read in the command line
-  options, remainder = parser.parse_args()
+  def_trip = Triple()
+  parser.add_argument('-m', '--m1', dest='m1', type='float', 
+    default=def_trip.m1, help = 
+    'Mass of star 1 in inner binary in solar masses [%g]' % def_trip.m1)
+  parser.add_argument('-n', '--m2', dest='m2', type='float', 
+    default=def_trip.m2, help = 
+    'Mass of star 2 in inner binary in solar masses [%g]' % def_trip.m2)
+  parser.add_argument('-o', '--m3', dest='m3', type='float', 
+    default=def_trip.m3, help = 
+    'Mass of tertiary in solar masses [%g]' % def_trip.m3)
+  parser.add_argument('-r', '--r1', dest='r1', type='float', 
+    default=def_trip.r1, help = 
+    'Radius of star 1 of the inner binary in R_Sun [%g]' % def_trip.r1)
+  parser.add_argument('-s', '--r2', dest='r2', type='float', 
+    default=def_trip.r2, help = 
+    'Radius of star 2 of the inner binary in R_Sun [%g]' % def_trip.r2)
+  parser.add_argument('-a', '--a1', dest='a1', type='float', 
+    default=def_trip.a1, help = 
+    'Inner semi-major axis in au [%g]' % def_trip.a1)
+  parser.add_argument('-b', '--a2', dest='a2', type='float', 
+    default=def_trip.a2, help = 
+    'Outer semi-major axis in au [%g]' % def_trip.a2)
+  parser.add_argument('-g', '--g1', dest='g1', type='float', 
+    default=def_trip.g1, help = 
+    'Inner argument of periapsis in degrees [%g]' % def_trip.g1)
+  parser.add_argument('-G', '--g2', dest='g2', type='float', 
+    default=def_trip.g2, help = 
+    'Outer argument of periapsis in degrees [%g]' % def_trip.g2)
+  parser.add_argument('-e', '--e1', dest='e1', type='float', 
+    default=def_trip.e1, help = 
+    'Inner eccentricity [%g]' % def_trip.e1)
+  parser.add_argument('-f', '--e2', dest='e2', type='float', 
+    default=def_trip.e2, help = 
+    'Outer eccentricity [%g]' % def_trip.e2)
+  parser.add_argument('-i', '--inc', dest='inc', type='float',
+    default=def_trip.inc, help = 
+    'Inclination of the third body in degrees [%g]' % def_trip.inc)
+  parser.add_argument('-t', '--end', dest='tstop', type='float', 
+    default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
+    % def_trip.tstop)
+  parser.add_argument('-C', '--cpu', dest='cputstop', type='float', 
+    default=def_trip.cputstop, help = 
+    'cpu time limit in seconds, if -1 then no limit [%g]' %
+    def_trip.cputstop)
+  parser.add_argument('-F', '--freq', dest='outfreq', type='int', 
+    default=def_trip.outfreq, help = 'Output frequency [%g]' % 
+    def_trip.outfreq)
+  parser.add_argument('-A', '--abstol', dest='atol', type='float', 
+    default=def_trip.atol, help = 'Absolute accuracy [%g]' % 
+    def_trip.atol)
+  parser.add_argument('-R', '--reltol', dest='rtol', type='float', 
+    default=def_trip.rtol, help = 'Relative accuracy [%g]' % 
+    def_trip.rtol)
+  parser.add_argument('--noquad', dest='quad', action='store_false',
+    default=def_trip.quadrupole, help = 'Turn off quadrupole terms')
+  parser.add_argument('--nooct', dest='oct', action='store_false',
+    default=def_trip.octupole, help = 'Turn off octupole terms')
+  parser.add_argument('-c', '--GR', dest='gr', action='store_true', 
+    default = def_trip.gr, help = 'Turn on general relativity terms')
+  parser.add_argument('-x', '--hex', dest='hex', action='store_true',
+    default = def_trip.hexadecapole, help = 'Turn on hexadecapole terms')
 
-  # Check for problems on the command line and convert all units to MKS
-  if options.m0 < 0:
-    print >> sys.stderr, 'm0 must be greater than zero.'
-    sys.exit(1)
-  m0 = options.m0 * const.M_sun.value
-  if options.m1 < 0:
-    print >> sys.stderr, 'm1 must be greater than zero.'
-    sys.exit(1)
-  m1 = options.m1 * const.M_sun.value
-  if options.m2 < 0:
-    print >> sys.stderr, 'm2 must be greater than zero.'
-    sys.exit(1)
-  m2 = options.m2 * const.M_sun.value
-  if options.r0 < 0:
-    print >> sys.stderr, 'r0 must be greater than zero.'
-    sys.exit(1)
-  r0 = options.r0 * const.R_sun.value
-  if options.r1 < 0:
-    print >> sys.stderr, 'r1 must be greater than zero.'
-    sys.exit(1)
-  r1 = options.r1 * const.R_sun.value
-  if options.a1 < 0:
-    print >> sys.stderr, 'a1 must be greater than zero.'
-    sys.exit(1)
-  a1 = options.a1 * const.au.value
-  if options.a2 < 0:
-    print >> sys.stderr, 'a2 must be greater than zero.'
-    sys.exit(1)
-  a2 = options.a2 * const.au.value
-  if options.g1 < 0 or options.g1 >= 360:
-    print >> sys.stderr, 'g1 must be between 0 and 360.'
-    sys.exit(1)
-  g1 = options.g1 * pi / 180.
-  if options.g2 < 0 or options.g2 >= 360:
-    print >> sys.stderr, 'g2 must be between 0 and 360.'
-    sys.exit(1)
-  g2 = options.g2 * pi / 180.
-  if options.e1 < 0 or options.e1 > 1:
-    print >> sys.stderr, 'e1 must be between 0 and 1.'
-    sys.exit(1)
-  e1 = options.e1
-  if options.e2 < 0 or options.e2 > 1:
-    print >> sys.stderr, 'e2 must be between 0 and 1.'
-    sys.exit(1)
-  e2 = options.e2
-  if options.relacc > 1 or options.relacc < 0:
-    print >> sys.stderr, 'relacc must be between 0 and 1.'
-    sys.exit(1)
-  relacc = options.relacc
-  if options.absacc < 0 or options.absacc > 1:
-    print >> sys.stderr, 'absacc must be between 0 and 1.'
-    sys.exit(1)
-  absacc = options.absacc
-  if options.endtime < 0:
-    print >> sys.stderr, 'stop time must be greater than 0'
-    sys.exit(1)
-  endtime = options.endtime * (unit.yr / unit.s).to(1)
-  if options.cputime < 0 and options.cputime != -1:
-    print >> sys.stderr, 'cputime must greater than 0 of exactly -1.'
-    sys.exit(1)
-  cputime = options.cputime
-  if options.inc < 0 or options.inc > 180:
-    print >> sys.stderr, 'cosi must be between -90 and 90 degrees.'
-    sys.exit(1)
-  inc = options.inc * pi / 180.
-  if options.outfreq < 0 and options.outfreq != -1:
-    print >> sys.stderr, 'output frequency must be greater than zero or exactly equal to -1'
-    sys.exit(1)
-  outfreq = options.outfreq
-  input_oct = options.oct
-  input_gr = options.gr
-  input_hex = options.hex
+  arguments, remainder = parser.parse_args()
+  return arguments, remainder
 
-  if cputime == -1:
-    cputime = float('inf')
+def main(argv=None):
+  args, remainder = process_command_line(argv)
+  t = Triple(m1=args.m1, m2=args.m2, m3=args.m3, r1=args.r1, r2=args.r2,
+        a1=args.a1, a2=args.a2, g1=args.g1, g2=args.g2, e1=args.e1,
+        e2=args.e2, inc=args.inc, tstop=args.tstop, cputstop=args.cputstop,
+        outfreq=args.outfreq, atol=args.atol, rtol=args.rtol,
+        quadrupole=args.quad, octupole=args.oct, hexadecapole=args.hex,
+        gr=args.gr)
+  t.integrate()
+  return 0
 
-  # Parameters to give to the secular function
-  m = (m0, m1, m2)
-  r = (r0, r1)
-  e = (e1, e2)
-  a = (a1, a2)
-  g = (g1, g2)
-  tstop = (endtime, cputime)
-  acc = (relacc, absacc)
-
-  in_params = (outfreq, acc, (input_gr, input_oct, input_hex))
-
-  # Run the secular calculation
-  try:
-    secular_evolve(m, r, e, a, g, inc, tstop, in_params)
-  except RuntimeError:
-    pass
+if __name__=='__main__':
+  status = main()
+  sys.exit(status)
