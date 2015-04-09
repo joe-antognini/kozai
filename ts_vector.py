@@ -134,8 +134,6 @@ class Triple_vector:
     return list(ret)
 
   def _step(self):
-    if self.nstep == 0:
-      self.tstart = time.time()
     self.solver.integrate(self.tstop, step=True)
     self.nstep += 1
     self.t = self.solver.t
@@ -145,6 +143,7 @@ class Triple_vector:
   def integrate(self):
     '''Integrate the triple in time.'''
     self.printout()
+    self.tstart = time.time()
     while (self.t < self.tstop) and 
       (time.time() - self.tstart < self.cputstop):
 

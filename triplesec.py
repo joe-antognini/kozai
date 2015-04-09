@@ -52,27 +52,14 @@ class Triple:
       self.a1 = None
       self.a2 = None
 
+    self.t = 0
+    self._t = 0
     self.th = np.cos(self.inc)
     self._m1 = self.m1 * M_sun
     self._m2 = self.m2 * M_sun
     self._m3 = self.m3 * M_sun
     self._a1 = self.a1 * au
     self._a2 = self.a2 * au
-
-    self.calc_C()
-    self.update()
-    self._H = np.sqrt(2 * self._G1 * self._G2 * self.th + self._G1**2 +
-      self._G2**2)
-
-    if outfilename is not None:
-      self.outfile = open(outfilename, 'w')
-
-    # Integration parameters
-    self.nstep = 0
-    self.t = 0
-    self.atol = atol
-    self.rtol = rtol
-    self.collision = False # Has a collision occured?
 
     self.quadrupole = quadrupole
     self.octupole = octupole
@@ -81,6 +68,26 @@ class Triple:
     if self.e2 == 0:
       self.octupole = False
 
+    self.calc_C()
+    self.calc_G1()
+    self.calc_G2()
+    self._H = np.sqrt(2 * self._G1 * self._G2 * self.th + self._G1**2 +
+      self._G2**2)
+    self.update()
+
+    self.outfilename = outfilename
+    if self.outfilename is not None:
+      self.outfile = open(self.outfilename, 'w')
+
+    # Integration parameters
+    self.nstep = 0
+    self.atol = atol
+    self.rtol = rtol
+    self.collision = False # Has a collision occured?
+
+    if self.properties_outfilename is not None:
+      self.ts_printjson()
+
     self.integration_algo = integration_algo
     self._y = [self._a1, self.e1, self.g1, self.e2, self.g2, self._H]
 
@@ -88,7 +95,7 @@ class Triple:
     self.solver = ode(self._deriv)
     self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
       rtol=rtol)
-    self.solver.set_initial_value(self._y, self.t).set_f_params(self.epsoct)
+    self.solver.set_initial_value(self._y, self._t)
     if self.integration_algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
@@ -145,10 +152,15 @@ class Triple:
     self.calc_G1()
     self.calc_G2()
 
+    self.inc = acos(self.th) * 180 / np.pi
+    self.a1 = self._a1 / au
+    self.t = self._t / yr2s
+
   def _deriv(self, t, y):
     '''The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002).'''
 
     # Unpack the values
+    print y
     a1, e1, g1, e2, g2, H = y
 
     # Calculate trig functions only once
@@ -162,6 +174,11 @@ class Triple:
     m3 = self._m3
     a2 = self._a2
     th = self.th
+    C2 = self.C2
+    C3 = self.C3
+    G1 = self._G1
+    G2 = self._G2
+    cosphi = self.cosphi
     B = 2 + 5 * e1**2 - 7 * e1**2 * cos(2 * g1)
     A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
 
@@ -339,35 +356,34 @@ class Triple:
         (1 - e1**2)**2) * sqrt(G * (m1 + m2) / a1) * (1 + 7 / 8. * e1**2) * 
         (G1 + G2 * th) / H)
 
-    der = (da1dt, dg1dt, de1dt, dg2dt, de2dt, dHdt)
+    der = [da1dt, dg1dt, de1dt, dg2dt, de2dt, dHdt]
     return der
 
   def _step(self):
-    if self.nstep == 0:
-      self.tstart = time.time()
     self.solver.integrate(self.tstop, step=True)
     self.nstep += 1
-    self.t = self.solver.t
-    self.a1, self.e1, self.g1, self.e2, self.g2 = y
+    self._t = self.solver.t
+    self.a1, self.e1, self.g1, self.e2, self.g2, self._H = self.solver.y
     self.g1 %= (2 * np.pi)
     self.g2 %= (2 * np.pi)
     self.update()
 
   def integrate(self):
     '''Integrate the triple in time.'''
-    self.printout()
-    while (self.t < self.tstop) and 
-      ((time.time() - self.tstart) < self.cputstop):
+    self.ts_printout()
+    self.tstart = time.time()
+    while ((self.t < self.tstop) and 
+      ((time.time() - self.tstart) < self.cputstop)):
 
       self._step()
       if self.nstep % self.outfreq == 0:
-        self.printout()
+        self.ts_printout()
 
       if self.a1 * (1 - self.e1) < self.r1 + self.r2:
         self.collision = True
         break
 
-    self.printout()
+    self.ts_printout()
     self.outfile.close()
 
   def ecc_extrema(self):
@@ -375,7 +391,9 @@ class Triple:
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
-    while self.t < self.tstop:
+    self.tstart = time.time()
+    while (self.t < self.tstop and 
+      time.time() - self.tstart < self.cputstop):
       self._step()
       if e_prev2 < e_prev > self.e1:
         outstring = ' '.join(map(str, [t_prev, e_prev]))
@@ -415,9 +433,8 @@ class Triple:
       
     '''
 
-    cosi = np.acos(self.th) * 180 / np.pi
-    outstring = ' '.join([self.t/yr2s, self.a1/au, self.e1, self.g1,
-      self.e2, self.g2, cosi])
+    outstring = ' '.join(map(str, [self.t, self.a1, self.e1, 
+      self.g1, self.e2, self.g2, self.inc]))
 
     if self.outfilename is None:
       print outstring
@@ -429,7 +446,7 @@ class Triple:
 
     json_data = self.__dict__
     outstring = json.dumps(json_data, sort_keys=True, indent=2)
-    if self.properties_outfilename is None:
+    if self.properties_outfilename == 'stderr':
       print >> sys.stderr, outstring
     else:
       with open(self.properties_outfilename, 'w') as p_outfile:
