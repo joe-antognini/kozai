@@ -9,51 +9,51 @@ from scipy.optimize import root, fsolve
 class Triple_vector:
   '''Evolve a triple in time using the vectorial equations of motion.'''
 
-  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
-    argperi=0, m1=1, m3=1, epsoct=None, tstop=1e3, cputstop=300, outfreq=1,
-    outfilename=None, atol=1e-9, rtol=1e-9):
+  def __init__(self, a1=1., a2=20., e1=.1, e2=.3, inc=80., longascnode=180.,
+    argperi=0., m1=1, m3=1, epsoct=None, tstop=1e3, cputstop=300, outfreq=1,
+    outfilename=None, atol=1e-9, rtol=1e-9, integration_algo='vode'):
 
     # Given parameters
-    self.a1 = a1
-    self.a2 = a2
-    self.e1_0 = e1
-    self.e2_0 = e2
-    self.inc_0 = inc * np.pi / 180
-    self.Omega_0 = longascnode * np.pi / 180
-    self.omega_0 = argperi * np.pi / 180
+    self.a1 = float(a1)
+    self.a2 = float(a2)
+    self.e1 = e1
+    self.e2 = e2
+    self.inc = inc * np.pi / 180
+    self.Omega = longascnode * np.pi / 180
+    self.omega = argperi * np.pi / 180
     self.m1 = m1
     self.m3 = m3
 
     # Derived parameters
-    self.j_0 = np.sqrt(1 - self.e1_0**2)
+    self.j = np.sqrt(1 - self.e1**2)
 
     if epsoct is None:
-      self.epsoct = (self.a1 / self.a2) * self.e2 / (1 - self.e2**2)
+      self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
     else:
       self.epsoct = epsoct
-      self.e2_0 = None
+      self.e2 = None
       self.a1 = None
       self.a2 = None
 
     # The vectorial elements
-    self.jhatvec_0 = np.array([
-      sin(self.inc_0) * sin(self.Omega_0),
-      -sin(self.inc_0) * cos(self.Omega_0),
-      cos(self.inc_0)])
-    self.jvec_0 = self.j_0 * self.jhatvec_0
+    self.jhatvec = np.array([
+      sin(self.inc) * sin(self.Omega),
+      -sin(self.inc) * cos(self.Omega),
+      cos(self.inc)])
+    self.jvec = self.j * self.jhatvec
 
-    ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec_0, self.omega_0))
-    self.ehatvec_0 = ehatvec_sol.x
-    self.evec_0 = self.e1_0 * self.ehatvec_0
+    ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec, self.omega))
+    self.ehatvec = ehatvec_sol.x
+    self.evec = self.e1 * self.ehatvec
 
     # Elements of the potential
 #    self.Phi0 = 4 * np.pi**2 * self.m3 * self.a1**2 / (self.a2**3 * (1 -
 #      self.e2**2)**(3/2.))
-    self.phiq = 3/4. * (self.jvec_0[2]**2 / 2. + self.e1_0**2 - 5/2. *
-      self.evec_0[2]**2 - 1/6.)
-    self.phioct = self.epsoct * 75/64. * (self.evec_0[0] * (1/5. - 8/5. * 
-      self.e1_0**2 + 7 * self.evec_0[2]**2 - self.jvec_0[2]**2) - 2 *
-      self.evec_0[2] * self.jvec_0[0] * self.jvec_0[2])
+    self.phiq = 3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. *
+      self.evec[2]**2 - 1/6.)
+    self.phioct = self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. * 
+      self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
+      self.evec[2] * self.jvec[0] * self.jvec[2])
 
     # Integration parameters
     self.nstep = 0
@@ -62,12 +62,12 @@ class Triple_vector:
     self.cputstop = cputstop
     self.outfreq = outfreq
     self.outfilename = outfilename
-    self.integration_algo = 'vode'
-    self.y = list(np.concatenate((self.jvec_0, self.evec_0)))
+    self.integration_algo = integration_algo
+    self.y = list(np.concatenate((self.jvec, self.evec)))
 
     # We have saved some of the initial values (e.g., jvec_0).  Here we set
     # them to their respective parameters.  (I.e., we set jvec = jvec_0[:].)
-    self._set_params()
+    self._save_initial_params()
 
     if self.outfilename is not None:
       self.outfile = open(self.outfilename, 'w')
@@ -79,10 +79,25 @@ class Triple_vector:
     self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct)
     self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def _set_params(self):
+  def _save_initial_params(self):
     '''Set the variables to their initial values.  Just a clone of
     reset().'''
-    self.reset()
+
+    # Ordinary variables
+    self.e1_0 = self.e1
+    self.e2_0 = self.e2
+    self.inc_0 = self.inc
+    self.Omega_0 = self.Omega
+    self.omega_0 = self.omega
+    self.j_0 = self.j
+    self.nstep = 0
+    self.t = 0
+
+    # Arrays need to be deep copied
+    self.jhatvec_0 = self.jhatvec[:]
+    self.jvec_0 = self.jvec[:]
+    self.ehatvec_0 = self.ehatvec[:]
+    self.evec_0 = self.evec[:]
 
   def reset(self):
     '''Set the variables to their initial values.'''
@@ -144,8 +159,8 @@ class Triple_vector:
     '''Integrate the triple in time.'''
     self.printout()
     self.tstart = time.time()
-    while (self.t < self.tstop) and 
-      (time.time() - self.tstart < self.cputstop):
+    while ((self.t < self.tstop) and 
+      (time.time() - self.tstart < self.cputstop)):
 
       self._step()
       if self.nstep % self.outfreq == 0:

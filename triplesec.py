@@ -2,7 +2,7 @@
 
 # System modules
 import json
-import optparse
+import argparse
 import random
 import sys
 import time
@@ -19,24 +19,24 @@ class Triple:
   motion.'''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, argperi1=0, 
-    argperi2=0, m1=1, m2=1, m3=1, r1=0, r2=0, epsoct=None, tstop=1e3,
+    argperi2=0, m1=1., m2=1., m3=1., r1=0, r2=0, epsoct=None, tstop=1e3,
     cputstop=300, outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9,
     quadrupole=True, octupole=True, hexadecapole=False, gr=False,
     integration_algo='vode', print_properties=False,
     properties_outfilename=None):
 
-    self.a1 = a1
-    self.a2 = a2
+    self.a1 = float(a1)
+    self.a2 = float(a2)
     self.e1 = e1
     self.e2 = e2
     self.inc = inc * np.pi / 180
     self.g1 = argperi1 * np.pi / 180
     self.g2 = argperi2 * np.pi / 180
-    self.m1 = m1
-    self.m2 = m2
-    self.m3 = m3
-    self.r1 = r1
-    self.r2 = r2
+    self.m1 = float(m1)
+    self.m2 = float(m2)
+    self.m3 = float(m3)
+    self.r1 = float(r1)
+    self.r2 = float(r2)
     self.tstop = tstop
     self.cputstop = cputstop
     self.outfreq = outfreq
@@ -148,9 +148,9 @@ class Triple:
     '''Update the derived parameters of the triple after a step.'''
     self.calc_C()
     self.calc_cosphi()
-    self.calc_th()
     self.calc_G1()
     self.calc_G2()
+    self.calc_th()
 
     self.inc = acos(self.th) * 180 / np.pi
     self.a1 = self._a1 / au
@@ -160,7 +160,7 @@ class Triple:
     '''The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002).'''
 
     # Unpack the values
-    print y
+    print self._G1
     a1, e1, g1, e2, g2, H = y
 
     # Calculate trig functions only once
@@ -356,7 +356,7 @@ class Triple:
         (1 - e1**2)**2) * sqrt(G * (m1 + m2) / a1) * (1 + 7 / 8. * e1**2) * 
         (G1 + G2 * th) / H)
 
-    der = [da1dt, dg1dt, de1dt, dg2dt, de2dt, dHdt]
+    der = [da1dt, de1dt, dg1dt, de2dt, dg2dt, dHdt]
     return der
 
   def _step(self):
@@ -429,7 +429,7 @@ class Triple:
   def ts_printout(self):
     '''Print out the state of the system in the format:
       
-      t  a1  e1  g1  e2  g2  cosi
+      t  a1  e1  g1  e2  g2  inc (deg)
       
     '''
 
@@ -462,56 +462,56 @@ def process_command_line(argv):
   parser = argparse.ArgumentParser()
 
   def_trip = Triple()
-  parser.add_argument('-m', '--m1', dest='m1', type='float', 
+  parser.add_argument('-m', '--m1', dest='m1', type=float, 
     default=def_trip.m1, help = 
     'Mass of star 1 in inner binary in solar masses [%g]' % def_trip.m1)
-  parser.add_argument('-n', '--m2', dest='m2', type='float', 
+  parser.add_argument('-n', '--m2', dest='m2', type=float, 
     default=def_trip.m2, help = 
     'Mass of star 2 in inner binary in solar masses [%g]' % def_trip.m2)
-  parser.add_argument('-o', '--m3', dest='m3', type='float', 
+  parser.add_argument('-o', '--m3', dest='m3', type=float, 
     default=def_trip.m3, help = 
     'Mass of tertiary in solar masses [%g]' % def_trip.m3)
-  parser.add_argument('-r', '--r1', dest='r1', type='float', 
+  parser.add_argument('-r', '--r1', dest='r1', type=float, 
     default=def_trip.r1, help = 
     'Radius of star 1 of the inner binary in R_Sun [%g]' % def_trip.r1)
-  parser.add_argument('-s', '--r2', dest='r2', type='float', 
+  parser.add_argument('-s', '--r2', dest='r2', type=float, 
     default=def_trip.r2, help = 
     'Radius of star 2 of the inner binary in R_Sun [%g]' % def_trip.r2)
-  parser.add_argument('-a', '--a1', dest='a1', type='float', 
+  parser.add_argument('-a', '--a1', dest='a1', type=float, 
     default=def_trip.a1, help = 
     'Inner semi-major axis in au [%g]' % def_trip.a1)
-  parser.add_argument('-b', '--a2', dest='a2', type='float', 
+  parser.add_argument('-b', '--a2', dest='a2', type=float, 
     default=def_trip.a2, help = 
     'Outer semi-major axis in au [%g]' % def_trip.a2)
-  parser.add_argument('-g', '--g1', dest='g1', type='float', 
+  parser.add_argument('-g', '--g1', dest='g1', type=float, 
     default=def_trip.g1, help = 
     'Inner argument of periapsis in degrees [%g]' % def_trip.g1)
-  parser.add_argument('-G', '--g2', dest='g2', type='float', 
+  parser.add_argument('-G', '--g2', dest='g2', type=float, 
     default=def_trip.g2, help = 
     'Outer argument of periapsis in degrees [%g]' % def_trip.g2)
-  parser.add_argument('-e', '--e1', dest='e1', type='float', 
+  parser.add_argument('-e', '--e1', dest='e1', type=float, 
     default=def_trip.e1, help = 
     'Inner eccentricity [%g]' % def_trip.e1)
-  parser.add_argument('-f', '--e2', dest='e2', type='float', 
+  parser.add_argument('-f', '--e2', dest='e2', type=float, 
     default=def_trip.e2, help = 
     'Outer eccentricity [%g]' % def_trip.e2)
-  parser.add_argument('-i', '--inc', dest='inc', type='float',
+  parser.add_argument('-i', '--inc', dest='inc', type=float,
     default=def_trip.inc, help = 
     'Inclination of the third body in degrees [%g]' % def_trip.inc)
-  parser.add_argument('-t', '--end', dest='tstop', type='float', 
+  parser.add_argument('-t', '--end', dest='tstop', type=float, 
     default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
     % def_trip.tstop)
-  parser.add_argument('-C', '--cpu', dest='cputstop', type='float', 
+  parser.add_argument('-C', '--cpu', dest='cputstop', type=float, 
     default=def_trip.cputstop, help = 
     'cpu time limit in seconds, if -1 then no limit [%g]' %
     def_trip.cputstop)
-  parser.add_argument('-F', '--freq', dest='outfreq', type='int', 
+  parser.add_argument('-F', '--freq', dest='outfreq', type=int, 
     default=def_trip.outfreq, help = 'Output frequency [%g]' % 
     def_trip.outfreq)
-  parser.add_argument('-A', '--abstol', dest='atol', type='float', 
+  parser.add_argument('-A', '--abstol', dest='atol', type=float, 
     default=def_trip.atol, help = 'Absolute accuracy [%g]' % 
     def_trip.atol)
-  parser.add_argument('-R', '--reltol', dest='rtol', type='float', 
+  parser.add_argument('-R', '--reltol', dest='rtol', type=float, 
     default=def_trip.rtol, help = 'Relative accuracy [%g]' % 
     def_trip.rtol)
   parser.add_argument('--noquad', dest='quad', action='store_false',
@@ -523,17 +523,17 @@ def process_command_line(argv):
   parser.add_argument('-x', '--hex', dest='hex', action='store_true',
     default = def_trip.hexadecapole, help = 'Turn on hexadecapole terms')
 
-  arguments, remainder = parser.parse_args()
-  return arguments, remainder
+  arguments = parser.parse_args()
+  return arguments
 
 def main(argv=None):
-  args, remainder = process_command_line(argv)
+  args = process_command_line(argv)
   t = Triple(m1=args.m1, m2=args.m2, m3=args.m3, r1=args.r1, r2=args.r2,
-        a1=args.a1, a2=args.a2, g1=args.g1, g2=args.g2, e1=args.e1,
-        e2=args.e2, inc=args.inc, tstop=args.tstop, cputstop=args.cputstop,
-        outfreq=args.outfreq, atol=args.atol, rtol=args.rtol,
-        quadrupole=args.quad, octupole=args.oct, hexadecapole=args.hex,
-        gr=args.gr)
+        a1=args.a1, a2=args.a2, argperi1=args.g1, argperi2=args.g2,
+        e1=args.e1, e2=args.e2, inc=args.inc, tstop=args.tstop,
+        cputstop=args.cputstop, outfreq=args.outfreq, atol=args.atol,
+        rtol=args.rtol, quadrupole=args.quad, octupole=args.oct,
+        hexadecapole=args.hex, gr=args.gr)
   t.integrate()
   return 0
 
