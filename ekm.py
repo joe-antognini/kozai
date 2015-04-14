@@ -57,8 +57,8 @@ class Triple_octupole:
     #
     # Given parameters
     #
-    self.a1 = a1
-    self.a2 = a2
+    self.a1 = float(a1)
+    self.a2 = float(a2)
     self.e1 = e1
     self.e2 = e2
     self.inc = inc
