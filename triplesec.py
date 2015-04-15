@@ -160,7 +160,6 @@ class Triple:
     '''The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002).'''
 
     # Unpack the values
-    print self._G1
     a1, e1, g1, e2, g2, H = y
 
     # Calculate trig functions only once
@@ -173,12 +172,17 @@ class Triple:
     m2 = self._m2
     m3 = self._m3
     a2 = self._a2
-    th = self.th
-    C2 = self.C2
-    C3 = self.C3
-    G1 = self._G1
-    G2 = self._G2
-    cosphi = self.cosphi
+  
+    G1 = m1 * m2 * np.sqrt(G * a1 * (1 - e1**2) / (m1 + m2))
+    G2 = (m1 + m2) * m3 * np.sqrt(G * a2 * (1 - e2**2) / (m1 + m2 + m3))
+
+    C2 = (G * m1 * m2 * m3 / (16 * (m1 + m2) * a2 * (1 - e2**2)**(3./2)) * 
+          (a1 / a2)**2)
+    C3 = (15 * G * m1 * m2 * m3 * (m2 - m1) / (64 * (m1 + m2)**2 * a2 *
+          (1 - e2**2)**(5./2)) * (a1 / a2)**3)
+
+    th = (H**2 - G1**2 - G2**2) / (2 * G1 * G2)
+    cosphi = cosg1 * cosg2 - th * sing1 * sing2
     B = 2 + 5 * e1**2 - 7 * e1**2 * cos(2 * g1)
     A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
 

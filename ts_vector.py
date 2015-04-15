@@ -47,8 +47,8 @@ class Triple_vector:
     self.evec = self.e1 * self.ehatvec
 
     # Elements of the potential
-#    self.Phi0 = 4 * np.pi**2 * self.m3 * self.a1**2 / (self.a2**3 * (1 -
-#      self.e2**2)**(3/2.))
+    self.Phi0 = 4 * np.pi**2 * self.m3 * self.a1**2 / (self.a2**3 * (1 -
+      self.e2**2)**(3/2.))
     self.phiq = 3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. *
       self.evec[2]**2 - 1/6.)
     self.phioct = self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. * 
