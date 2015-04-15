@@ -1,5 +1,11 @@
 #! /usr/bin/env python 
 
+'''
+triplesec
+
+Numerically integrate the dynamics of a hierarchical triple.
+'''
+
 # System modules
 import json
 import argparse
@@ -52,6 +58,7 @@ class Triple:
       self.a1 = None
       self.a2 = None
 
+    # Unit conversions
     self.t = 0
     self._t = 0
     self.th = np.cos(self.inc)

@@ -1,5 +1,12 @@
 #! /usr/bin/env python
 
+'''
+ts_vector
+
+Numerically integrate the dynamics of a hierarchical triple in the test
+particle limit.
+'''
+
 import time
 import numpy as np
 from math import sin, cos
@@ -11,7 +18,8 @@ class Triple_vector:
 
   def __init__(self, a1=1., a2=20., e1=.1, e2=.3, inc=80., longascnode=180.,
     argperi=0., m1=1, m3=1, epsoct=None, tstop=1e3, cputstop=300, outfreq=1,
-    outfilename=None, atol=1e-9, rtol=1e-9, integration_algo='vode'):
+    outfilename=None, atol=1e-9, rtol=1e-9, integration_algo='vode',
+    quadrupole=True, octupole=True):
 
     # Given parameters
     self.a1 = float(a1)
@@ -20,11 +28,17 @@ class Triple_vector:
     self.e2 = e2
     self.inc = inc * np.pi / 180
     self.Omega = longascnode * np.pi / 180
-    self.omega = argperi * np.pi / 180
+    self.g1 = argperi * np.pi / 180
     self.m1 = m1
+    self.m2 = 0 # Assume a test particle
     self.m3 = m3
+    self._t = 0
+
+    self.quadrupole = quadrupole
+    self.octupole = octupole
 
     # Derived parameters
+    self.th = np.cos(self.inc)
     self.j = np.sqrt(1 - self.e1**2)
 
     if epsoct is None:
@@ -35,6 +49,10 @@ class Triple_vector:
       self.a1 = None
       self.a2 = None
 
+    # Integrals of motion
+    self.Hhatquad = ((2 + 3 * self.e1**2) * (1 - 3 * self.th**2) - 15 *
+      self.e1**2 * (1 - self.th**2) * np.cos(2 * self.g1))
+
     # The vectorial elements
     self.jhatvec = np.array([
       sin(self.inc) * sin(self.Omega),
@@ -42,22 +60,28 @@ class Triple_vector:
       cos(self.inc)])
     self.jvec = self.j * self.jhatvec
 
-    ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec, self.omega))
+    ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec, self.g1))
     self.ehatvec = ehatvec_sol.x
     self.evec = self.e1 * self.ehatvec
 
     # Elements of the potential
     self.Phi0 = 4 * np.pi**2 * self.m3 * self.a1**2 / (self.a2**3 * (1 -
       self.e2**2)**(3/2.))
-    self.phiq = 3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. *
-      self.evec[2]**2 - 1/6.)
-    self.phioct = self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. * 
-      self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
-      self.evec[2] * self.jvec[0] * self.jvec[2])
+    self.phiq = 0
+    if self.quadrupole:
+      self.phiq += 3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. *
+        self.evec[2]**2 - 1/6.)
+    self.phioct = 0
+    if self.octupole:
+      self.phioct += self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. *
+        self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
+        self.evec[2] * self.jvec[0] * self.jvec[2])
+    self.tsec = 2 * np.pi * np.sqrt(self.m1 * self.a1) / self.Phi0
+
+    self.update()
 
     # Integration parameters
     self.nstep = 0
-    self.t = 0
     self.tstop = tstop
     self.cputstop = cputstop
     self.outfreq = outfreq
@@ -76,7 +100,7 @@ class Triple_vector:
     self.solver = ode(self._deriv)
     self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
       rtol=rtol)
-    self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct)
+    self.solver.set_initial_value(self.y, self._t).set_f_params(self.epsoct)
     self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
   def _save_initial_params(self):
@@ -88,10 +112,9 @@ class Triple_vector:
     self.e2_0 = self.e2
     self.inc_0 = self.inc
     self.Omega_0 = self.Omega
-    self.omega_0 = self.omega
+    self.g1_0 = self.g1
     self.j_0 = self.j
     self.nstep = 0
-    self.t = 0
 
     # Arrays need to be deep copied
     self.jhatvec_0 = self.jhatvec[:]
@@ -107,16 +130,34 @@ class Triple_vector:
     self.e2 = self.e2_0
     self.inc = self.inc_0
     self.Omega = self.Omega_0
-    self.omega = self.omega_0
+    self.g1 = self.g1_0
     self.j = self.j_0
     self.nstep = 0
-    self.t = 0
+    self._t = 0
 
     # Arrays need to be deep copied
     self.jhatvec = self.jhatvec_0[:]
     self.jvec = self.jvec_0[:]
     self.ehatvec = self.ehatvec_0[:]
     self.evec = self.evec_0[:]
+
+    self.update()
+
+  def update(self):
+    '''Update the derived parameters.'''
+    self.calc_Th()
+    self.calc_CKL()
+    self.t = self._t * self.tsec
+    self.e1 = np.linalg.norm(self.evec)
+  
+  def calc_Th(self):
+    '''Calculate Kozai's integral.'''
+    self.Th = (1 - self.e1**2) * np.cos(self.inc)**2
+
+  def calc_CKL(self):
+    '''Calculate the libration constant.'''
+    self.CKL = (self.e1**2 * (1 - 5./2 * np.sin(self.inc)**2 *
+      np.sin(self.g1)**2))
 
   def _deriv(self, t, y, epsoct):
     '''The EOMs.  See Eqs. 4 of Katz et al. (2011).'''
@@ -151,9 +192,10 @@ class Triple_vector:
   def _step(self):
     self.solver.integrate(self.tstop, step=True)
     self.nstep += 1
-    self.t = self.solver.t
+    self._t = self.solver.t
     self.jvec = self.solver.y[:3]
     self.evec = self.solver.y[3:]
+    self.update()
 
   def integrate(self):
     '''Integrate the triple in time.'''
@@ -167,7 +209,8 @@ class Triple_vector:
         self.printout()
 
     self.printout()
-    self.outfile.close()
+    if self.outfilename is not None:
+      self.outfile.close()
 
   def ecc_extrema(self):
     '''Integrate the triple, but only print out on eccentricity extrema.'''
@@ -187,7 +230,8 @@ class Triple_vector:
       e_prev2 = e_prev
       e_prev = e
 
-    self.outfile.close()
+    if self.outfilename is not None:
+      self.outfile.close()
 
   def printflips(self):
     '''Integrate the triple, but print out only when there is a flip.'''
@@ -267,7 +311,7 @@ class Triple_vector:
       pass
 
 
-def _evec_root(x, j, omega):
+def _evec_root(x, j, g1):
   '''The set of equations that determine evec.'''
 
   # Orthogonal to j
@@ -278,6 +322,6 @@ def _evec_root(x, j, omega):
 
   # Gives the right argument of periapsis
   crossnorm = np.sqrt(j[0]**2 + j[1]**2)
-  cond3 = x[0] * j[1] / crossnorm - x[1] * j[0] / crossnorm + cos(omega)
+  cond3 = x[0] * j[1] / crossnorm - x[1] * j[0] / crossnorm + cos(g1)
 
   return [cond1, cond2, cond3]

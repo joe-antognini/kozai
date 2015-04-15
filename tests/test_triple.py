@@ -3,13 +3,17 @@
 from ..triplesec import Triple
 from ..ts_vector import Triple_vector
 
+###
+### Object creation tests
+###
+
 def test_make_Triple():
   '''Try to create a Triple class.'''
   t = Triple()
 
-def test_make_Triple_vector():
-  '''Try to create a Triple_vector class.'''
-  t = Triple_vector()
+def test_nooct():
+  '''Try to turn the octupole term off.'''
+  t = Triple(octupole=False)
 
 # todo test cpu timeout
 

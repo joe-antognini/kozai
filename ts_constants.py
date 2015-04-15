@@ -1,8 +1,10 @@
 #! /usr/bin/env python
 
+#
 # ts_constants
 #
 # All constants are in SI
+#
 
 G = 6.67384e-11 # m^3 / kg / s^2
 c = 299792458. # m / s

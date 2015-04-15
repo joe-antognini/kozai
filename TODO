@@ -1,4 +1,7 @@
-- Fix kl_period module
+- Add command line functionality to ts_vector, ekm, and kl_period
 - Write more tests
 - Write documentation
 - Make an Ipython notebook tutorial
+- Maybe change storage of inc as radians instead of degrees?
+- Maybe separate integration functionality out of class structure?
+- If tstop is reset, reset integrator

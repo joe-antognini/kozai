@@ -1,12 +1,12 @@
 #! /usr/bin/env python
 
-#
-# ekm
-#
-# Numerically integrate only the octupole term of the equations of motion of
-# a hierarchical triple.  This procedure averages over not only the
-# individual orbits, but also the individual KL cycles as well.
-#
+'''
+ekm
+
+Numerically integrate only the octupole term of the equations of motion of
+a hierarchical triple.  This procedure averages over not only the
+individual orbits, but also the individual KL cycles as well.
+'''
 
 import json
 import sys
