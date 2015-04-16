@@ -8,16 +8,25 @@ a hierarchical triple.  This procedure averages over not only the
 individual orbits, but also the individual KL cycles as well.
 '''
 
+# Ignore DeprecationWarnings if called from command line
+if __name__ == '__main__':
+  import __init__
+
+# System packages
+import argparse
 import json
+import random
 import sys
 import time
-import random
+
+# Numerical packages
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import brentq
 from scipy.special import ellipk, ellipe
-import astropy.constants as const
-import astropy.units as unit
+
+# Triplesec packages
+from ts_constants import *
 
 class Triple_octupole:
   '''A hierachical triple where only the octupole term of the Hamiltonian is
@@ -44,15 +53,10 @@ class Triple_octupole:
     rtol: Relative tolerance of the integrator
   '''
 
-  # Some useful constants
-  G = const.G.value
-  c = const.c.value
-  yr2s = 3.15576e7
-  au = const.au.value
-
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, longascnode=180,
     argperi=0, epsoct=None, phiq=None, chi=None, tstop=1e3, cputstop=300, 
-    outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9):
+    outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9,
+    integration_algo='vode'):
 
     #
     # Given parameters
@@ -105,17 +109,19 @@ class Triple_octupole:
     self.cputstop = cputstop
     self.outfreq = outfreq
     self.outfilename = outfilename
-    self.integration_algo = 'vode'
+    self.integration_algo = integration_algo
     self.y = [self.jz, self.Omega]
     self.tol = 1e-9
+    self.atol = atol
+    self.rtol = rtol
 
     if self.outfilename is not None:
       self.outfile = open(self.outfilename, 'w')
 
     # Set up the integrator
     self.solver = ode(self._deriv)
-    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
-      rtol=rtol)
+    self.solver.set_integrator(self.integration_algo, nsteps=1, 
+      atol=self.atol, rtol=self.rtol)
     self.solver.set_initial_value(self.y, self.t).set_f_params(self.epsoct,
       self.phiq)
     self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
@@ -176,13 +182,17 @@ class Triple_octupole:
   def integrate(self):
     '''Integrate the triple in time.'''
     self.printout()
-    while self.t < self.tstop:
+
+    self.tstart = time.time()
+    while ((self.t < self.tstop) and 
+      ((time.time() - self.tstart) < self.cputstop)):
       self._step()
       if self.nstep % self.outfreq == 0:
         self.printout()
 
     self.printout()
-    self.outfile.close()
+    if self.outfilename is not None:
+      self.outfile.close()
 
   def printout(self):
     '''Print out the state of the system in the format:
@@ -274,7 +284,81 @@ def F(CKL):
   integral = quad(_F_integrand, x_low, 1)[0]
   return 32 * np.sqrt(3) / np.pi * integral
 
+def process_command_line(argv):
+  '''Process the command line.'''
+  
+  if argv is None:
+    argv = sys.argv[1:]
 
-if __name__ == '__main__':
-  triple = Triple_octupole(epsoct=.01, tstop=400)
-  triple.integrate()
+  # Configure the command line options
+  parser = argparse.ArgumentParser()
+
+  def_trip = Triple_octupole()
+  parser.add_argument('-a', '--a1', dest='a1', type=float, 
+    default=def_trip.a1, help = 
+    'Inner semi-major axis in au [%g]' % def_trip.a1, metavar='\b')
+  parser.add_argument('-b', '--a2', dest='a2', type=float, 
+    default=def_trip.a2, help = 
+    'Outer semi-major axis in au [%g]' % def_trip.a2, metavar='\b')
+  parser.add_argument('-e', '--e1', dest='e1', type=float, 
+    default=def_trip.e1, help = 
+    'Inner eccentricity [%g]' % def_trip.e1, metavar='\b')
+  parser.add_argument('-f', '--e2', dest='e2', type=float, 
+    default=def_trip.e2, help = 
+    'Outer eccentricity [%g]' % def_trip.e2, metavar='\b')
+  parser.add_argument('-i', '--inc', dest='inc', type=float,
+    default=def_trip.inc, help = 
+    'Inclination of the third body in degrees [%g]' % def_trip.inc,
+    metavar='\b')
+  parser.add_argument('-g', '--g1', dest='g1', type=float, 
+    default=def_trip.omega, help = 
+    'Inner argument of periapsis in degrees [%g]' % (def_trip.omega * 180 
+      / np.pi), metavar='\b')
+  parser.add_argument('-L', '--Omega', dest='Omega', type=float, 
+    default=def_trip.Omega, help = 
+    'Longitude of ascending node in degrees [%g]' % def_trip.Omega,
+    metavar='\b')
+  parser.add_argument('-t', '--end', dest='tstop', type=float, 
+    default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
+    % def_trip.tstop, metavar='\b')
+  parser.add_argument('-C', '--cpu', dest='cputstop', type=float, 
+    default=def_trip.cputstop, help = 
+    'cpu time limit in seconds, if -1 then no limit [%g]' %
+    def_trip.cputstop, metavar='\b')
+  parser.add_argument('-F', '--freq', dest='outfreq', type=int, 
+    default=def_trip.outfreq, help = 'Output frequency [%g]' % 
+    def_trip.outfreq, metavar='\b')
+  parser.add_argument('-A', '--abstol', dest='atol', type=float, 
+    default=def_trip.atol, help = 'Absolute accuracy [%g]' % 
+    def_trip.atol, metavar='\b')
+  parser.add_argument('-R', '--reltol', dest='rtol', type=float, 
+    default=def_trip.rtol, help = 'Relative accuracy [%g]' % 
+    def_trip.rtol, metavar='\b')
+  parser.add_argument('--epsoct', dest='epsoct', type=float, help = 
+    'Set epsilon_octupole parameter (override SMA and e2 settings)',
+    metavar='\b')
+  parser.add_argument('--phiq', dest='phiq', type=float, help =
+    'Set the constant phi_q (override e1, g1, and Omega)', metavar='\b')
+  parser.add_argument('--chi', dest='chi', type=float, help =
+    'Set the constant chi (override e1, g1, and Omega)', metavar='\b')
+  parser.add_argument('--algorithm', dest='algo', type=str,
+    default=def_trip.integration_algo, help = 'Integration algorithm [%s]' 
+    % def_trip.integration_algo)
+
+  arguments = parser.parse_args()
+  return arguments
+
+def main(argv=None):
+  args = process_command_line(argv)
+  to = Triple_octupole(a1=args.a1, a2=args.a2, e1=args.e1, e2=args.e2, 
+        inc=args.inc, argperi=args.g1, longascnode=args.Omega, 
+        epsoct=args.epsoct, phiq=args.phiq, chi=args.chi, tstop=args.tstop,
+        cputstop=args.cputstop, outfreq=args.outfreq, atol=args.atol, 
+        rtol=args.rtol, integration_algo=args.algo)
+
+  to.integrate()
+  return 0
+
+if __name__=='__main__':
+  status = main()
+  sys.exit(status)

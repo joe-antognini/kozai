@@ -65,3 +65,11 @@ def test_ecc_extrema_tofile():
   tv = Triple_vector(tstop=10, outfilename='foo.dat')
   tv.ecc_extrema()
   os.remove('foo.dat') # Clean up
+
+def test_cputimeout():
+  '''Make sure that the integration halts after exceeding the maximum CPU
+  integration time.'''
+  large_time = 1e9
+  tv = Triple_vector(tstop=large_time, cputstop=.1)
+  tv.integrate()
+  assert tv.t < large_time
