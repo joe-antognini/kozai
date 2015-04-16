@@ -13,7 +13,7 @@ the integration to occur within the context of an external Python program.
 It is also possible to integrate triples directly from the command line,
 however.  Output may be directed either to a specified file or to stdout.
 
-The underlying integrator is from the SciPi ODE package.  By default this
+The underlying integrator is from the SciPy ODE package.  By default this
 package uses VODE as its integration algorithm, but the algorithm may be
 changed to any of the other integration algorithms supported by the SciPy
 ODE package.
