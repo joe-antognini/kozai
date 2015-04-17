@@ -7,3 +7,11 @@
 - Add radii to Triple_vector
 - Make sure integration routines handle no CPU limit (-1) correctly
 - If run from command line, print triple properties to stderr
+
+- Remove command line functionality
+- Remove long init declaration
+- Add params file
+- Store results rather than write (write to tmp if tool large)
+- Make __repr__ method
+- IntegrationTimeout exception class
+- Restructure directory with source directory
