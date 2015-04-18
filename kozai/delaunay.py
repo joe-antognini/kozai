@@ -32,8 +32,8 @@ class TripleDelaunay:
     e1: Eccentricity of inner binary
     e2: Eccentricity of outer binary
     inc: Inclination between inner and outer binaries in degrees
-    argperi1: Argument of periapsis of the inner binary in degrees
-    argperi2: Argument of periapsis of the outer binary in degrees
+    g1: Argument of periapsis of the inner binary in degrees
+    g2: Argument of periapsis of the outer binary in degrees
     m1: Mass of component 1 of the inner binary in solar masses
     m2: Mass of component 2 of the inner binary in solar masses
     m3: Mass of the tertiary in solar masses
@@ -41,21 +41,6 @@ class TripleDelaunay:
     r2: Radius of component 2 of the inner binary in solar radii
     epsoct: epsilon_octupole (without the mass term).  If set, this
       overrides semi-major axis and outer eccentricity settings.
-    tstop: The time to integrate in years
-    cputstop: The maximum amount of CPU time to integrate in seconds
-    outfreq: Print output on every nth step
-    outfilename: Write output to this file.  If None, print to stdout.
-    atol: Absolute tolerance of the integrator
-    rtol: Relative tolerance of the integrator
-    quadrupole: Include the quadrupole term of the Hamiltonian
-    octupole: Include the octupole term of the Hamiltonian
-    hexadecapole: Include the hexadecapole term of the Hamiltonian
-    gr: Include post-Newtonian terms in the equations of motion
-    integration_algo: The integration algorithm.  See scipy.ode
-      documentation
-    print_properties: Print the properties of the triple in JSON format
-    properties_outfilename: Filename to which properties will be written.
-      If None and print_properties is True, print to stderr.
   '''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, argperi1=0, 
@@ -65,19 +50,14 @@ class TripleDelaunay:
     self.a2 = a2
     self.e1 = e1
     self.e2 = e2
-    self.inc = inc * np.pi / 180
-    self.g1 = argperi1 * np.pi / 180
-    self.g2 = argperi2 * np.pi / 180
-    self.m1 = float(m1)
-    self.m2 = float(m2)
-    self.m3 = float(m3)
-    self.r1 = float(r1)
-    self.r2 = float(r2)
-    self.tstop = tstop
-    self.cputstop = cputstop
-    self.outfreq = outfreq
-    self.print_properties = print_properties
-    self.properties_outfilename = properties_outfilename
+    self.inc = inc
+    self.g1 = g1
+    self.g2 = g2
+    self.m1 = m1
+    self.m2 = m2
+    self.m3 = m3
+    self.r1 = r1
+    self.r2 = r2
 
     # Derived parameters
     if epsoct is None:
@@ -88,62 +68,12 @@ class TripleDelaunay:
       self.a1 = None
       self.a2 = None
 
-    # Unit conversions
-    self.t = 0
-    self._t = 0
-    self.th = np.cos(self.inc)
-    self._m1 = self.m1 * M_sun
-    self._m2 = self.m2 * M_sun
-    self._m3 = self.m3 * M_sun
-    self._a1 = self.a1 * au
-    self._a2 = self.a2 * au
-
-    self.quadrupole = quadrupole
-    self.octupole = octupole
-    self.hexadecapole = hexadecapole
-    self.gr = gr
-    if self.e2 == 0:
-      self.octupole = False
-
     self.calc_C()
     self.calc_G1()
     self.calc_G2()
     self._H = np.sqrt(2 * self._G1 * self._G2 * self.th + self._G1**2 +
       self._G2**2)
     self.update()
-
-    self.outfilename = outfilename
-    if self.outfilename is not None:
-      self.outfile = open(self.outfilename, 'w')
-
-    # Integration parameters
-    self.nstep = 0
-    self.atol = atol
-    self.rtol = rtol
-    self.collision = False # Has a collision occured?
-
-    if self.properties_outfilename is not None:
-      self.ts_printjson()
-
-    self.integration_algo = integration_algo
-    self._y = [self._a1, self.e1, self.g1, self.e2, self.g2, self._H]
-
-    # Set up the integrator
-    self.solver = ode(self._deriv)
-    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
-      rtol=rtol)
-    self.solver.set_initial_value(self._y, self._t)
-    if self.integration_algo == 'vode':
-      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
-
-    self.t = 0
-    self._t = 0
-    self.th = np.cos(self.inc)
-    self._m1 = self.m1 * M_sun
-    self._m2 = self.m2 * M_sun
-    self._m3 = self.m3 * M_sun
-    self._a1 = self.a1 * au
-    self._a2 = self.a2 * au
 
   #
   # Unit conversions
@@ -530,15 +460,82 @@ class TripleDelaunay:
     self.solver.integrate(self.tstop, step=True)
     self.nstep += 1
     self._t = self.solver.t
-    self.a1, self.e1, self.g1, self.e2, self.g2, self._H = self.solver.y
-    self.g1 %= (2 * np.pi)
-    self.g2 %= (2 * np.pi)
+    self._a1, self._e1, self._g1, self._e2, self._g2, self._H = self.solver.y
+    self._g1 %= (2 * np.pi)
+    self._g2 %= (2 * np.pi)
     self.update()
+
+  ###
+  ### Default integrator parameters
+  ###
+  self.default_tstop = 1e3
+  self.default_cputstop = 300
+  self.default_outfreq = 1
+  self.default_outfile = None
+  self.default_atol = 1e-9
+  self.default_rtol = 1e-9
+  self.default_quad = True
+  self.default_oct  = True
+  self.default_hex  = False
+  self.default_gr = False
+  self.default_integration_algo = 'vode'
+
+  def integrator_setup(self):
+    '''Set up the integrator.'''
+
+    self.tstop = tstop
+    self.cputstop = cputstop
+    self.outfreq = outfreq
+    self.print_properties = print_properties
+    self.properties_outfilename = properties_outfilename
+
+    # Integration parameters
+    self.nstep = 0
+    self.atol = atol
+    self.rtol = rtol
+    self.collision = False # Has a collision occured?
+
+    self.quadrupole = quadrupole
+    self.octupole = octupole
+    self.hexadecapole = hexadecapole
+    self.gr = gr
+
+    self.integration_algo = integration_algo
+    self._y = [self._a1, self.e1, self._g1, self.e2, self._g2, self._H]
+
+    # Set up the integrator
+    self.solver = ode(self._deriv)
+    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
+      rtol=rtol)
+    self.solver.set_initial_value(self._y, self._t)
+    if self.integration_algo == 'vode':
+      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+
 
   def integrate(self, tstop=1e3, cputstop=300, outfreq=1, outfile=None,
     atol=1e-9, rtol=1e-9, quadrupole=True, octupole=True,
     hexadecapole=False, gr=False, integration_algo='vode'):
-    '''Integrate the triple in time.'''
+    '''Integrate the triple in time.
+
+    Parameters:
+      tstop: The time to integrate in years
+      cputstop: The maximum amount of CPU time to integrate in seconds
+      outfreq: Print output on every nth step
+      outfilename: Write output to this file.  If None, print to stdout.
+      atol: Absolute tolerance of the integrator
+      rtol: Relative tolerance of the integrator
+      quadrupole: Include the quadrupole term of the Hamiltonian
+      octupole: Include the octupole term of the Hamiltonian
+      hexadecapole: Include the hexadecapole term of the Hamiltonian
+      gr: Include post-Newtonian terms in the equations of motion
+      integration_algo: The integration algorithm.  See scipy.ode
+        documentation
+      print_properties: Print the properties of the triple in JSON format
+      properties_outfilename: Filename to which properties will be written.
+        If None and print_properties is True, print to stderr.
+    '''
+    
+    self.integrator_setup()
 
     self.ts_printout()
     self.tstart = time.time()
@@ -559,6 +556,9 @@ class TripleDelaunay:
 
   def ecc_extrema(self):
     '''Integrate the triple, but only print out on eccentricity extrema.'''
+
+    self.integrator_setup()
+
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
@@ -578,6 +578,9 @@ class TripleDelaunay:
 
   def printflips(self):
     '''Integrate the triple, but print out only when there is a flip.'''
+
+    self.integrator_setup()
+
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
