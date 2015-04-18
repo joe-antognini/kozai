@@ -1,14 +1,10 @@
 #! /usr/bin/env python 
 
 '''
-triplesec
+delaunay
 
 Numerically integrate the dynamics of a hierarchical triple.
 '''
-
-# Ignore DeprecationWarnings if called from command line
-if __name__ == '__main__':
-  import __init__
 
 # System modules
 import argparse
@@ -24,10 +20,11 @@ from scipy.integrate import ode, quad
 from scipy.optimize import root, fsolve
 from ts_constants import *
 
-class Triple:
-  '''Evolve a hierarchical triple using the Hamiltonian equations of motion.
-  This class handles triples in which all objects are massive.  To integrate
-  in the test particle approximation use the Triple_vector class.
+class TripleDelaunay:
+  '''Evolve a hierarchical triple using the Delaunay orbital elements (as
+  opposed to the vectorial notation).  This class handles triples in which
+  all objects are massive.  To integrate in the test particle approximation
+  use the Triple_vector class.
 
   Parameters:
     a1: Semi-major axis of inner binary in AU
@@ -62,14 +59,10 @@ class Triple:
   '''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, argperi1=0, 
-    argperi2=0, m1=1., m2=1., m3=1., r1=0, r2=0, epsoct=None, tstop=1e3,
-    cputstop=300, outfreq=1, outfilename=None, atol=1e-9, rtol=1e-9,
-    quadrupole=True, octupole=True, hexadecapole=False, gr=False,
-    integration_algo='vode', print_properties=False,
-    properties_outfilename=None):
+    argperi2=0, m1=1., m2=1., m3=1., r1=0, r2=0, epsoct=None):
 
-    self.a1 = float(a1)
-    self.a2 = float(a2)
+    self.a1 = a1
+    self.a2 = a2
     self.e1 = e1
     self.e2 = e2
     self.inc = inc * np.pi / 180
@@ -142,6 +135,132 @@ class Triple:
     self.solver.set_initial_value(self._y, self._t)
     if self.integration_algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+
+    self.t = 0
+    self._t = 0
+    self.th = np.cos(self.inc)
+    self._m1 = self.m1 * M_sun
+    self._m2 = self.m2 * M_sun
+    self._m3 = self.m3 * M_sun
+    self._a1 = self.a1 * au
+    self._a2 = self.a2 * au
+
+  #
+  # Unit conversions
+  #
+  # Properties beginning with an underscore are stored in radians or SI
+  # units.  Most calculations are much easier when done in SI, but it is
+  # inconvenient for the user to deal with SI units.  Thus, the properties
+  # can be set using AU, M_sun, degrees, yr, or whatever other units are
+  # appropriate.
+  #
+
+  # Times
+
+  @property
+  def t(self):
+    '''Time in yr'''
+    return self._t / yr2s
+
+  @t.setter
+  def t(self, val):
+    '''Set time in yr'''
+    self._t = val * yr2s
+  
+  # Masses
+
+  @property
+  def m1(self):
+    '''m1 in solar masses'''
+    return self._m1 / M_sun
+
+  @m1.setter
+  def m1(self, val):
+    '''Set m1 in solar masses'''
+    self._m1 = val * M_sun
+
+  @property
+  def m2(self):
+    '''m2 in solar masses'''
+    return self._m2 / M_sun
+
+  @m2.setter
+  def m2(self, val):
+    '''Set m2 in solar masses'''
+    self._m2 = val * M_sun
+
+  @property
+  def m3(self):
+    '''m3 in solar masses'''
+    return self._m3 / M_sun
+
+  @m3.setter
+  def m3(self, val):
+    '''Set m3 in solar masses'''
+    self._m3 = val * M_sun
+
+  # Distances
+
+  @property
+  def a1(self):
+    '''a1 in AU'''
+    return self._a1 / au
+
+  @a1.setter
+  def a1(self, val):
+    '''Set a1 in AU'''
+    self._a1 = val * au
+
+  @property
+  def a2(self):
+    '''a2 in AU'''
+    return self._a2 / au
+
+  @a2.setter
+  def a2(self, val):
+    '''Set a2 in AU'''
+    self._a2 = val * au
+
+  @property
+  def r1(self):
+    '''r1 in R_sun'''
+    return self._r1 / R_sun
+
+  @r1.setter
+  def r1(self, val):
+    '''r1 in R_sun'''
+    self._r1 = val * R_sun
+
+  @property
+  def r2(self):
+    '''r2 in R_sun'''
+    return self._r2 / R_sun
+
+  @r2.setter
+  def r2(self, val):
+    '''r2 in R_sun'''
+    self._r2 = val * R_sun
+
+  # Angles
+
+  @property
+  def inc(self):
+    '''Inclination in degrees'''
+    return self._inc * 180 / pi
+
+  @inc.setter
+  def inc(self, val):
+    '''Set inclination in degrees'''
+    self._inc = val * pi / 180
+
+  @property
+  def g1(self):
+    '''g1 in degrees'''
+    return self._g1 * 180 / pi
+
+  @g1.setter
+  def g1(self, val):
+    self._g1 = val * pi / 180
 
   def calc_cosphi(self):
     '''Calculate the angle between periastron directions.  See Eq. 23 of
@@ -416,8 +535,11 @@ class Triple:
     self.g2 %= (2 * np.pi)
     self.update()
 
-  def integrate(self):
+  def integrate(self, tstop=1e3, cputstop=300, outfreq=1, outfile=None,
+    atol=1e-9, rtol=1e-9, quadrupole=True, octupole=True,
+    hexadecapole=False, gr=False, integration_algo='vode'):
     '''Integrate the triple in time.'''
+
     self.ts_printout()
     self.tstart = time.time()
     while ((self.t < self.tstop) and 
@@ -490,7 +612,7 @@ class Triple:
     else:
       self.outfile.write(outstring + '\n')
 
-  def ts_printjson(self):
+  def __repr__(self):
     '''Print out the initial values in JSON format.'''
 
     json_data = self.__dict__
@@ -500,100 +622,3 @@ class Triple:
     else:
       with open(self.properties_outfilename, 'w') as p_outfile:
         p_outfile.write(outstring)
-
-def process_command_line(argv):
-  '''Process the command line.'''
-  
-  if argv is None:
-    argv = sys.argv[1:]
-
-  # Configure the command line options
-  parser = argparse.ArgumentParser()
-
-  def_trip = Triple()
-  parser.add_argument('-m', '--m1', dest='m1', type=float, 
-    default=def_trip.m1, help = 
-    'Mass of star 1 in inner binary in solar masses [%g]' % def_trip.m1,
-    metavar='\b')
-  parser.add_argument('-n', '--m2', dest='m2', type=float, 
-    default=def_trip.m2, help = 
-    'Mass of star 2 in inner binary in solar masses [%g]' % def_trip.m2,
-    metavar='\b')
-  parser.add_argument('-o', '--m3', dest='m3', type=float, 
-    default=def_trip.m3, help = 
-    'Mass of tertiary in solar masses [%g]' % def_trip.m3, metavar='\b')
-  parser.add_argument('-r', '--r1', dest='r1', type=float, 
-    default=def_trip.r1, help = 
-    'Radius of star 1 of the inner binary in R_Sun [%g]' % def_trip.r1,
-    metavar='\b')
-  parser.add_argument('-s', '--r2', dest='r2', type=float, 
-    default=def_trip.r2, help = 
-    'Radius of star 2 of the inner binary in R_Sun [%g]' % def_trip.r2,
-    metavar='\b')
-  parser.add_argument('-a', '--a1', dest='a1', type=float, 
-    default=def_trip.a1, help = 
-    'Inner semi-major axis in au [%g]' % def_trip.a1, metavar='\b')
-  parser.add_argument('-b', '--a2', dest='a2', type=float, 
-    default=def_trip.a2, help = 
-    'Outer semi-major axis in au [%g]' % def_trip.a2, metavar='\b')
-  parser.add_argument('-g', '--g1', dest='g1', type=float, 
-    default=def_trip.g1, help = 
-    'Inner argument of periapsis in degrees [%g]' % def_trip.g1,
-    metavar='\b')
-  parser.add_argument('-G', '--g2', dest='g2', type=float, 
-    default=def_trip.g2, help = 
-    'Outer argument of periapsis in degrees [%g]' % def_trip.g2,
-    metavar='\b')
-  parser.add_argument('-e', '--e1', dest='e1', type=float, 
-    default=def_trip.e1, help = 
-    'Inner eccentricity [%g]' % def_trip.e1, metavar='\b')
-  parser.add_argument('-f', '--e2', dest='e2', type=float, 
-    default=def_trip.e2, help = 
-    'Outer eccentricity [%g]' % def_trip.e2, metavar='\b')
-  parser.add_argument('-i', '--inc', dest='inc', type=float,
-    default=def_trip.inc, help = 
-    'Inclination of the third body in degrees [%g]' % def_trip.inc,
-    metavar='\b')
-  parser.add_argument('-t', '--tstop', dest='tstop', type=float, 
-    default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
-    % def_trip.tstop, metavar='\b')
-  parser.add_argument('-C', '--cpu', dest='cputstop', type=float, 
-    default=def_trip.cputstop, help = 
-    'cpu time limit in seconds, if -1 then no limit [%g]' %
-    def_trip.cputstop, metavar='\b')
-  parser.add_argument('-F', '--freq', dest='outfreq', type=int, 
-    default=def_trip.outfreq, help = 'Output frequency [%g]' % 
-    def_trip.outfreq, metavar='\b')
-  parser.add_argument('-A', '--abstol', dest='atol', type=float, 
-    default=def_trip.atol, help = 'Absolute accuracy [%g]' % 
-    def_trip.atol, metavar='\b')
-  parser.add_argument('-R', '--reltol', dest='rtol', type=float, 
-    default=def_trip.rtol, help = 'Relative accuracy [%g]' % 
-    def_trip.rtol, metavar='\b')
-  parser.add_argument('--noquad', dest='quad', action='store_false',
-    default=def_trip.quadrupole, help = 'Turn off quadrupole terms')
-  parser.add_argument('--nooct', dest='oct', action='store_false',
-    default=def_trip.octupole, help = 'Turn off octupole terms')
-  parser.add_argument('-c', '--GR', dest='gr', action='store_true', 
-    default = def_trip.gr, help = 'Turn on general relativity terms')
-  parser.add_argument('-x', '--hex', dest='hex', action='store_true',
-    default = def_trip.hexadecapole, help = 'Turn on hexadecapole terms')
-
-  arguments = parser.parse_args()
-  return arguments
-
-def main(argv=None):
-  args = process_command_line(argv)
-  t = Triple(m1=args.m1, m2=args.m2, m3=args.m3, r1=args.r1, r2=args.r2,
-        a1=args.a1, a2=args.a2, argperi1=args.g1, argperi2=args.g2,
-        e1=args.e1, e2=args.e2, inc=args.inc, tstop=args.tstop,
-        cputstop=args.cputstop, outfreq=args.outfreq, atol=args.atol,
-        rtol=args.rtol, quadrupole=args.quad, octupole=args.oct,
-        hexadecapole=args.hex, gr=args.gr)
-
-  t.integrate()
-  return 0
-
-if __name__=='__main__':
-  status = main()
-  sys.exit(status)
