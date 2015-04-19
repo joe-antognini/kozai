@@ -511,7 +511,6 @@ class TripleDelaunay:
     if self.integration_algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-
   def integrate(self, tstop=1e3, cputstop=300, outfreq=1, outfile=None,
     atol=1e-9, rtol=1e-9, quadrupole=True, octupole=True,
     hexadecapole=False, gr=False, integration_algo='vode'):
