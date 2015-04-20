@@ -19,3 +19,5 @@
 - Add xintegrate or long_integrate function for long integrations -- i.e.,
   do not store the entire output, but only write to file.
 - Make delaunay and vectorial modules.
+- Allow TripleDelaunay to be set by epsoct
+- Allow tstop to be set in Kozai timescales as well as yr

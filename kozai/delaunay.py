@@ -7,7 +7,6 @@ Numerically integrate the dynamics of a hierarchical triple.
 '''
 
 # System modules
-import argparse
 import json
 import random
 import sys
@@ -18,7 +17,7 @@ from math import sqrt, cos, sin, pi, acos
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import root, fsolve
-from ts_constants import *
+from _kozai_constants import *
 
 class TripleDelaunay:
   '''Evolve a hierarchical triple using the Delaunay orbital elements (as
@@ -39,18 +38,15 @@ class TripleDelaunay:
     m3: Mass of the tertiary in solar masses
     r1: Radius of component 1 of the inner binary in solar radii
     r2: Radius of component 2 of the inner binary in solar radii
-    epsoct: epsilon_octupole (without the mass term).  If set, this
-      overrides semi-major axis and outer eccentricity settings.
   '''
 
-  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, argperi1=0, 
-    argperi2=0, m1=1., m2=1., m3=1., r1=0, r2=0, epsoct=None):
+  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, g1=0, g2=0, m1=1., 
+    m2=1., m3=1., r1=0, r2=0):
 
     self.a1 = a1
     self.a2 = a2
     self.e1 = e1
     self.e2 = e2
-    self.inc = inc
     self.g1 = g1
     self.g2 = g2
     self.m1 = m1
@@ -58,32 +54,17 @@ class TripleDelaunay:
     self.m3 = m3
     self.r1 = r1
     self.r2 = r2
+    self.inc = inc
 
-    # Derived parameters
-    if epsoct is None:
-      self.epsoct = self.e2 / (1 - self.e2**2) * self.a1 / self.a2
-    else:
-      self.epsoct = epsoct
-      self.e2 = None
-      self.a1 = None
-      self.a2 = None
-
-    self.calc_C()
-    self.calc_G1()
-    self.calc_G2()
-    self._H = np.sqrt(2 * self._G1 * self._G2 * self.th + self._G1**2 +
-      self._G2**2)
-    self.update()
-
-  #
-  # Unit conversions
-  #
-  # Properties beginning with an underscore are stored in radians or SI
-  # units.  Most calculations are much easier when done in SI, but it is
-  # inconvenient for the user to deal with SI units.  Thus, the properties
-  # can be set using AU, M_sun, degrees, yr, or whatever other units are
-  # appropriate.
-  #
+  ###
+  ### Unit conversions & variable definitions
+  ###
+  ### Properties beginning with an underscore are stored in radians or SI
+  ### units.  Most calculations are much easier when done in SI, but it is
+  ### inconvenient for the user to deal with SI units.  Thus, the properties
+  ### can be set using AU, M_sun, degrees, yr, or whatever other units are
+  ### appropriate.
+  ###
 
   # Times
 
@@ -174,16 +155,6 @@ class TripleDelaunay:
   # Angles
 
   @property
-  def inc(self):
-    '''Inclination in degrees'''
-    return self._inc * 180 / pi
-
-  @inc.setter
-  def inc(self, val):
-    '''Set inclination in degrees'''
-    self._inc = val * pi / 180
-
-  @property
   def g1(self):
     '''g1 in degrees'''
     return self._g1 * 180 / pi
@@ -192,62 +163,69 @@ class TripleDelaunay:
   def g1(self, val):
     self._g1 = val * pi / 180
 
-  def calc_cosphi(self):
-    '''Calculate the angle between periastron directions.  See Eq. 23 of
-    Blaes et al. (2002).'''
-
-    self.cosphi = (-cos(self.g1) * cos(self.g2) - self.th * sin(self.g1) *
-      sin(self.g2))
-
-  def calc_G1(self):
-    '''Calculate G1.  See Eq. 6 of Blaes et al. (2002).'''
-    self._G1 = (self._m1 * self._m2 * np.sqrt(G * self._a1 * (1 -
-      self.e1**2) / (self._m1 + self._m2)))
-
-  def calc_G2(self):
-    '''Calculate G2.  See Eq. 7 of Blaes et al. (2002).'''
-    self._G2 = ((self._m1 + self._m2) * self._m3 * np.sqrt(G * self._a2 * (1
-      - self.e2**2) / (self._m1 + self._m2 + self._m3)))
-
-  def calc_C(self):
-    '''Calculate C2 and C3.  Eqs. 18 & 19 of BLaes et al. (2002)'''
-
-    if self.quadrupole:
-      self.C2 = (G * self._m1 * self._m2 * self._m3 / (16 * (self._m1 +
-        self._m2) * self._a2 * (1 - self.e2**2)**(3./2)) * (self._a1 /
-        self._a2)**2)
-    else:
-      self.C2 = 0
-
-    if self.octupole:
-      self.C3 = (15 * G * self._m1 * self._m2 * self._m3 * (self._m1 -
-        self._m2) / (64 * (self._m1 + self._m2)**2 * self._a2 * (1 -
-        self.e2**2)**(5./2)) * (self._a1 / self._a2)**3)
-    else:
-      self.C3 = 0
-
-  def calc_th(self):
+  @property
+  def cosphi(self):
+    '''Angle between the arguments of periapsis.  See Eq. 23 of Blaes et al.
+    (2002).'''
+    return (-cos(self._g1) * cos(self._g2) - self.th * sin(self._g1) *
+      sin(self._g2))
+  
+  @property
+  def th(self):
     '''Calculate the cosine of the inclination.  See Eq. 22 of Blaes et al.
     (2002).'''
-
-    self.th = ((self._H**2 - self._G1**2 - self._G2**2) / (2 * self._G1 *
+    return ((self._H**2 - self._G1**2 - self._G2**2) / (2 * self._G1 *
       self._G2))
 
-  def calc_cosi(self):
-    '''Calculate cos i.  A synonym for calc_th.'''
-    self.calc_th()
+  @property
+  def _inc(self):
+    '''The mutual inclination in radians.'''
+    return acos(self.th)
+  
+  @property
+  def inc(self):
+    '''The mutual inclination.'''
+    return self._inc * 180 / pi
 
-  def update(self):
-    '''Update the derived parameters of the triple after a step.'''
-    self.calc_C()
-    self.calc_cosphi()
-    self.calc_G1()
-    self.calc_G2()
-    self.calc_th()
+  @inc.setter
+  def inc(self, val):
+    '''Set the inclination.  This really sets _H and inc is recalculated.'''
+    self._H = sqrt(self._G1**2 + self._G2**2 + 2 * self._G1 * self._G2 *
+      cos(val * pi / 180))
 
-    self.inc = acos(self.th) * 180 / np.pi
-    self.a1 = self._a1 / au
-    self.t = self._t / yr2s
+  # Angular momenta
+
+  @property
+  def _G1(self):
+    '''Calculate G1.  See Eq. 6 of Blaes et al. (2002).'''
+    return (self._m1 * self._m2 * sqrt(G * self._a1 * (1 -
+      self.e1**2) / (self._m1 + self._m2)))
+
+  @property
+  def _G2(self):
+    '''Calculate G2.  See Eq. 7 of Blaes et al. (2002).'''
+    return ((self._m1 + self._m2) * self._m3 * sqrt(G * self._a2 * (1
+      - self.e2**2) / (self._m1 + self._m2 + self._m3)))
+
+  # Energies
+
+  @property
+  def C2(self):
+    '''Calculate C2.  See Eq. 18 of Blaes et al., (2002).'''
+    return (G * self._m1 * self._m2 * self._m3 / (16 * (self._m1 +
+      self._m2) * self._a2 * (1 - self.e2**2)**(3./2)) * (self._a1 /
+      self._a2)**2)
+
+  @property
+  def C3(self):
+    '''Calculate C3.  See Eq. 19 of Blaes et al., (2002).'''
+    return (15 * G * self._m1 * self._m2 * self._m3 * (self._m1 -
+      self._m2) / (64 * (self._m1 + self._m2)**2 * self._a2 * (1 -
+      self.e2**2)**(5./2)) * (self._a1 / self._a2)**3)
+
+  ###
+  ### Integration routines
+  ###
 
   def _deriv(self, t, y):
     '''The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002).'''
@@ -266,8 +244,10 @@ class TripleDelaunay:
     m3 = self._m3
     a2 = self._a2
   
-    G1 = m1 * m2 * np.sqrt(G * a1 * (1 - e1**2) / (m1 + m2))
-    G2 = (m1 + m2) * m3 * np.sqrt(G * a2 * (1 - e2**2) / (m1 + m2 + m3))
+    # TODO
+    # Are these necessary now that we are calculating them dynamically?
+    G1 = m1 * m2 * sqrt(G * a1 * (1 - e1**2) / (m1 + m2))
+    G2 = (m1 + m2) * m3 * sqrt(G * a2 * (1 - e2**2) / (m1 + m2 + m3))
 
     C2 = (G * m1 * m2 * m3 / (16 * (m1 + m2) * a2 * (1 - e2**2)**(3./2)) * 
           (a1 / a2)**2)
@@ -460,25 +440,25 @@ class TripleDelaunay:
     self.solver.integrate(self.tstop, step=True)
     self.nstep += 1
     self._t = self.solver.t
-    self._a1, self._e1, self._g1, self._e2, self._g2, self._H = self.solver.y
-    self._g1 %= (2 * np.pi)
-    self._g2 %= (2 * np.pi)
+    self._a1, self.e1, self._g1, self.e2, self._g2, self._H = self.solver.y
+    self._g1 %= (2 * pi)
+    self._g2 %= (2 * pi)
     self.update()
 
   ###
   ### Default integrator parameters
   ###
-  self.default_tstop = 1e3
-  self.default_cputstop = 300
-  self.default_outfreq = 1
-  self.default_outfile = None
-  self.default_atol = 1e-9
-  self.default_rtol = 1e-9
-  self.default_quad = True
-  self.default_oct  = True
-  self.default_hex  = False
-  self.default_gr = False
-  self.default_integration_algo = 'vode'
+  _default_tstop = 1e3
+  _default_cputstop = 300
+  _default_outfreq = 1
+  _default_outfile = None
+  _default_atol = 1e-9
+  _default_rtol = 1e-9
+  _default_quad = True
+  _default_oct  = True
+  _default_hex  = False
+  _default_gr = False
+  _default_algo = 'vode'
 
   def integrator_setup(self):
     '''Set up the integrator.'''
@@ -511,16 +491,17 @@ class TripleDelaunay:
     if self.integration_algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def integrate(self, tstop=1e3, cputstop=300, outfreq=1, outfile=None,
-    atol=1e-9, rtol=1e-9, quadrupole=True, octupole=True,
-    hexadecapole=False, gr=False, integration_algo='vode'):
+  def integrate(self, tstop=_default_tstop, cputstop=_default_cputstop, 
+    outfreq=_default_outfreq, atol=_default_atol, rtol=_default_rtol, 
+    quadrupole=_default_quad, octupole=_default_oct,
+    hexadecapole=_default_hex, gr=_default_gr,
+    integration_algo=_default_algo):
     '''Integrate the triple in time.
 
     Parameters:
       tstop: The time to integrate in years
       cputstop: The maximum amount of CPU time to integrate in seconds
       outfreq: Print output on every nth step
-      outfilename: Write output to this file.  If None, print to stdout.
       atol: Absolute tolerance of the integrator
       rtol: Relative tolerance of the integrator
       quadrupole: Include the quadrupole term of the Hamiltonian
@@ -529,9 +510,6 @@ class TripleDelaunay:
       gr: Include post-Newtonian terms in the equations of motion
       integration_algo: The integration algorithm.  See scipy.ode
         documentation
-      print_properties: Print the properties of the triple in JSON format
-      properties_outfilename: Filename to which properties will be written.
-        If None and print_properties is True, print to stderr.
     '''
     
     self.integrator_setup()
@@ -568,7 +546,7 @@ class TripleDelaunay:
       if e_prev2 < e_prev > self.e1:
         outstring = ' '.join(map(str, [t_prev, e_prev]))
         if self.outfilename is None:
-          print outstring
+          print(outstring)
         else:
           self.outfile.write(outstring + '\n')
       t_prev = self.t
@@ -590,7 +568,7 @@ class TripleDelaunay:
         if np.sign(self.th) != sign_prev:
           outstring = ' '.join(map(str, [t_prev, e_prev]))
           if self.outfilename is None:
-            print outstring
+            print(outstring)
           else:
             self.outfile.write(outstring + '\n')
         sign_prev = np.sign(self.th)
@@ -610,7 +588,7 @@ class TripleDelaunay:
       self.g1, self.e2, self.g2, self.inc]))
 
     if self.outfilename is None:
-      print outstring
+      print(outstring)
     else:
       self.outfile.write(outstring + '\n')
 
@@ -620,7 +598,7 @@ class TripleDelaunay:
     json_data = self.__dict__
     outstring = json.dumps(json_data, sort_keys=True, indent=2)
     if self.properties_outfilename == 'stderr':
-      print >> sys.stderr, outstring
+      print(outstring, file=sys.stderr)
     else:
       with open(self.properties_outfilename, 'w') as p_outfile:
         p_outfile.write(outstring)
