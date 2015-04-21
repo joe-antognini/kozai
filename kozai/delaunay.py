@@ -71,7 +71,6 @@ class TripleDelaunay(object):
     self.inc = inc
 
     # Default integrator parameters
-    self.tstop = 1e3
     self.cputstop = 300
     self.outfreq = 1
     self.outfile = None
@@ -514,6 +513,7 @@ class TripleDelaunay(object):
       tstop: The time to integrate in years
     '''
     
+    self.tstop = tstop
     n_columns = 7
     self.integrator_setup()
     self.integration_steps = np.zeros((self.maxoutput, n_columns))
