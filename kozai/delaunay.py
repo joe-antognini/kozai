@@ -19,7 +19,7 @@ from scipy.integrate import ode, quad
 from scipy.optimize import root, fsolve
 from _kozai_constants import *
 
-class TripleDelaunay:
+class TripleDelaunay(object):
   '''Evolve a hierarchical triple using the Delaunay orbital elements (as
   opposed to the vectorial notation).  This class handles triples in which
   all objects are massive.  To integrate in the test particle approximation
@@ -38,11 +38,25 @@ class TripleDelaunay:
     m3: Mass of the tertiary in solar masses
     r1: Radius of component 1 of the inner binary in solar radii
     r2: Radius of component 2 of the inner binary in solar radii
+
+  Other parameters:
+    tstop: The time to integrate in years
+    cputstop: The wall time to integrate in seconds
+    outfreq: The number of steps between saving output
+    outfile: The file to write out to
+    atol: Absolute tolerance of the integrator
+    rotl: Relative tolerance of the integrator
+    quadrupole: Toggle the quadrupole term
+    octupole: Toggle the octupole term
+    hexadecapole: Toggle the hexadecapole term
+    gr: Toggle GR effects
+    algo: Set the integration algorithm (see the scipy.ode docs)
   '''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, g1=0, g2=0, m1=1., 
     m2=1., m3=1., r1=0, r2=0):
 
+    self.tstop = 1e3
     self.a1 = a1
     self.a2 = a2
     self.e1 = e1
@@ -55,6 +69,20 @@ class TripleDelaunay:
     self.r1 = r1
     self.r2 = r2
     self.inc = inc
+
+    # Default integrator parameters
+    self.tstop = 1e3
+    self.cputstop = 300
+    self.outfreq = 1
+    self.outfile = None
+    self.atol = 1e-9
+    self.rtol = 1e-9
+    self.quadrupole = True
+    self.octupole  = True
+    self.hexadecapole  = False
+    self.gr = False
+    self.algo = 'vode'
+    self.maxoutput = 1e6
 
   ###
   ### Unit conversions & variable definitions
@@ -164,6 +192,15 @@ class TripleDelaunay:
     self._g1 = val * pi / 180
 
   @property
+  def g2(self):
+    '''g2 in degrees'''
+    return self._g2 * 180 / pi
+
+  @g2.setter
+  def g2(self, val):
+    self._g2 = val * pi / 180
+
+  @property
   def cosphi(self):
     '''Angle between the arguments of periapsis.  See Eq. 23 of Blaes et al.
     (2002).'''
@@ -223,6 +260,14 @@ class TripleDelaunay:
       self._m2) / (64 * (self._m1 + self._m2)**2 * self._a2 * (1 -
       self.e2**2)**(5./2)) * (self._a1 / self._a2)**3)
 
+  @property
+  def outfreq(self):
+    return self._outfreq
+
+  @outfreq.setter
+  def outfreq(self, val):
+    self._outfreq = int(val)
+
   ###
   ### Integration routines
   ###
@@ -260,13 +305,13 @@ class TripleDelaunay:
     A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
 
     # Eq. 11 of Blaes et al. (2002)
-    da1dt = 0
+    da1dt = 0.
     if self.gr:
       da1dt += -(64 * G**3 * m1 * m2 * (m1 + m2) / (5 * c**5 * a1**3 * 
         sqrt((1 - e1**2)**7)) * (1 + 73 / 24. * e1**2 + 37 / 96. * e1**4))
 
     # Eq. 12 of Blaes et al. (2002)
-    dg1dt = 0
+    dg1dt = 0.
     if self.quadrupole:
       dg1dt += (6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
         e1**2 - th**2)) + th / G2 * (2 + e1**2 * (3 - 5 * cos(2 * g1)))))
@@ -325,7 +370,7 @@ class TripleDelaunay:
         g2))))))
 
     # Eq. 13 of Blaes et al. (2002)
-    de1dt = 0
+    de1dt = 0.
     if self.quadrupole:
       de1dt += (30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1))
     if self.octupole:
@@ -346,7 +391,7 @@ class TripleDelaunay:
       (th**2 - 1) * sin(2 * (2 * g1 + g2)))))) / (2048 * a2**5 * sqrt((1 -
       e2**2)**7) * (m1 + m2)**3))
 
-    dg2dt = 0
+    dg2dt = 0.
     if self.quadrupole:
       dg2dt += (3 * C2 * (2 * th / G1 * (2 + e1**2 * (3 - 5 * cos(2 * g1))) + 1
         / G2 * (4 + 6 * e1**2 + (5 * th**2 - 3) * (2 + 3 * e1**2 - 5 * e1**2 *
@@ -411,7 +456,7 @@ class TripleDelaunay:
       G * (m1 + m2 + m3))))
 
     # Eq. 16 of Blaes et al. (2002)
-    de2dt = 0
+    de2dt = 0.
     if self.octupole:
       de2dt += (C3 * e1 * (1 - e2**2) / G2 * (10 * th * (1 - th**2) * (1 -
       e1**2) * sing1 * cosg2 + A * (cosg1 * sing2 - th * sing1 * cosg2)))
@@ -427,7 +472,7 @@ class TripleDelaunay:
         m2)**4)))
 
     # Eq. 17 of Blaes et al. (2002)
-    dHdt = 0
+    dHdt = 0.
     if self.gr:
       dHdt += (-32 * G**3 * m1**2 * m2**2 / (5 * c**5 * a1**3 * 
         (1 - e1**2)**2) * sqrt(G * (m1 + m2) / a1) * (1 + 7 / 8. * e1**2) * 
@@ -443,93 +488,56 @@ class TripleDelaunay:
     self._a1, self.e1, self._g1, self.e2, self._g2, self._H = self.solver.y
     self._g1 %= (2 * pi)
     self._g2 %= (2 * pi)
-    self.update()
-
-  ###
-  ### Default integrator parameters
-  ###
-  _default_tstop = 1e3
-  _default_cputstop = 300
-  _default_outfreq = 1
-  _default_outfile = None
-  _default_atol = 1e-9
-  _default_rtol = 1e-9
-  _default_quad = True
-  _default_oct  = True
-  _default_hex  = False
-  _default_gr = False
-  _default_algo = 'vode'
 
   def integrator_setup(self):
     '''Set up the integrator.'''
 
-    self.tstop = tstop
-    self.cputstop = cputstop
-    self.outfreq = outfreq
-    self.print_properties = print_properties
-    self.properties_outfilename = properties_outfilename
-
     # Integration parameters
+    self.t = 0
     self.nstep = 0
-    self.atol = atol
-    self.rtol = rtol
     self.collision = False # Has a collision occured?
 
-    self.quadrupole = quadrupole
-    self.octupole = octupole
-    self.hexadecapole = hexadecapole
-    self.gr = gr
-
-    self.integration_algo = integration_algo
     self._y = [self._a1, self.e1, self._g1, self.e2, self._g2, self._H]
 
     # Set up the integrator
     self.solver = ode(self._deriv)
-    self.solver.set_integrator(self.integration_algo, nsteps=1, atol=atol,
-      rtol=rtol)
+    self.solver.set_integrator(self.algo, nsteps=1, atol=self.atol, 
+      rtol=self.rtol)
     self.solver.set_initial_value(self._y, self._t)
-    if self.integration_algo == 'vode':
+    if self.algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def integrate(self, tstop=_default_tstop, cputstop=_default_cputstop, 
-    outfreq=_default_outfreq, atol=_default_atol, rtol=_default_rtol, 
-    quadrupole=_default_quad, octupole=_default_oct,
-    hexadecapole=_default_hex, gr=_default_gr,
-    integration_algo=_default_algo):
+  def integrate(self, tstop):
     '''Integrate the triple in time.
 
     Parameters:
       tstop: The time to integrate in years
-      cputstop: The maximum amount of CPU time to integrate in seconds
-      outfreq: Print output on every nth step
-      atol: Absolute tolerance of the integrator
-      rtol: Relative tolerance of the integrator
-      quadrupole: Include the quadrupole term of the Hamiltonian
-      octupole: Include the octupole term of the Hamiltonian
-      hexadecapole: Include the hexadecapole term of the Hamiltonian
-      gr: Include post-Newtonian terms in the equations of motion
-      integration_algo: The integration algorithm.  See scipy.ode
-        documentation
     '''
     
+    n_columns = 7
     self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+    self.integration_steps[0] = [self.t, self.a1, self.e1, self.g1, 
+      self.e2, self.g2, self.inc]
 
-    self.ts_printout()
     self.tstart = time.time()
-    while ((self.t < self.tstop) and 
+    while ((self.t < tstop) and 
       ((time.time() - self.tstart) < self.cputstop)):
 
       self._step()
       if self.nstep % self.outfreq == 0:
-        self.ts_printout()
+        self.integration_steps[int(self.nstep / self.outfreq)] = [self.t, 
+          self.a1, self.e1, self.g1, self.e2, self.g2, self.inc]
 
       if self.a1 * (1 - self.e1) < self.r1 + self.r2:
         self.collision = True
         break
 
-    self.ts_printout()
-    if self.outfilename is not None:
-      self.outfile.close()
+    laststep = int(self.nstep / self.outfreq) + 1
+    self.integration_steps[laststep] = [self.t, 
+      self.a1, self.e1, self.g1, self.e2, self.g2, self.inc]
+
+    return self.integration_steps[:laststep+1]
 
   def ecc_extrema(self):
     '''Integrate the triple, but only print out on eccentricity extrema.'''
@@ -546,7 +554,7 @@ class TripleDelaunay:
       if e_prev2 < e_prev > self.e1:
         outstring = ' '.join(map(str, [t_prev, e_prev]))
         if self.outfilename is None:
-          print(outstring)
+          print outstring
         else:
           self.outfile.write(outstring + '\n')
       t_prev = self.t
@@ -568,7 +576,7 @@ class TripleDelaunay:
         if np.sign(self.th) != sign_prev:
           outstring = ' '.join(map(str, [t_prev, e_prev]))
           if self.outfilename is None:
-            print(outstring)
+            print outstring
           else:
             self.outfile.write(outstring + '\n')
         sign_prev = np.sign(self.th)
@@ -588,7 +596,7 @@ class TripleDelaunay:
       self.g1, self.e2, self.g2, self.inc]))
 
     if self.outfilename is None:
-      print(outstring)
+      print outstring
     else:
       self.outfile.write(outstring + '\n')
 
@@ -597,8 +605,4 @@ class TripleDelaunay:
 
     json_data = self.__dict__
     outstring = json.dumps(json_data, sort_keys=True, indent=2)
-    if self.properties_outfilename == 'stderr':
-      print(outstring, file=sys.stderr)
-    else:
-      with open(self.properties_outfilename, 'w') as p_outfile:
-        p_outfile.write(outstring)
+    return outstring
