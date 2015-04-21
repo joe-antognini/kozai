@@ -32,6 +32,11 @@ def test_set_after_creation():
   t.m2 = 1e-3
   assert_allclose(t.inc, 80)
 
+def test_epsoct():
+  '''Test the epsoct calculation.'''
+  t = TripleDelaunay(a1=1, a2=20, e2=.3)
+  assert_allclose(t.epsoct, .01648351648)
+
 ###
 ### Representation tests
 ###

@@ -16,6 +16,8 @@ import time
 from math import sqrt, cos, sin, pi, acos
 import numpy as np
 from scipy.integrate import ode, quad
+
+# Kozai modules
 from _kozai_constants import *
 
 class TripleDelaunay(object):
@@ -42,7 +44,6 @@ class TripleDelaunay(object):
     tstop: The time to integrate in years
     cputstop: The wall time to integrate in seconds
     outfreq: The number of steps between saving output
-    outfile: The file to write out to
     atol: Absolute tolerance of the integrator
     rotl: Relative tolerance of the integrator
     quadrupole: Toggle the quadrupole term
@@ -56,7 +57,6 @@ class TripleDelaunay(object):
     m2=1., m3=1., r1=0, r2=0):
 
     self._H = None
-    self.tstop = None
 
     self.a1 = a1
     self.a2 = a2
@@ -73,9 +73,9 @@ class TripleDelaunay(object):
     self.t = 0
 
     # Default integrator parameters
+    self.tstop = None
     self.cputstop = 300
     self.outfreq = 1
-    self.outfile = None
     self.atol = 1e-9
     self.rtol = 1e-9
     self.quadrupole = True
@@ -294,6 +294,12 @@ class TripleDelaunay(object):
     return (15 * G * self._m1 * self._m2 * self._m3 * (self._m1 -
       self._m2) / (64 * (self._m1 + self._m2)**2 * self._a2 * (1 -
       self.e2**2)**(5./2)) * (self._a1 / self._a2)**3)
+
+  # Other parameters
+
+  @property
+  def epsoct(self):
+    return self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
 
   @property
   def outfreq(self):
@@ -689,10 +695,10 @@ class TripleDelaunay(object):
     json_data = self.initial_state
 
     # Add some other properties
+    json_data['epsoct'] = self.epsoct
     json_data['tstop'] = self.tstop
     json_data['cputstop'] = self.cputstop
     json_data['outfreq'] = self.outfreq
-    json_data['outfile'] = self.outfile
     json_data['atol'] = self.atol
     json_data['rtol'] = self.rtol
     json_data['quadrupole'] = self.quadrupole

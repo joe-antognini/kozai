@@ -8,20 +8,22 @@ particle limit using vectorial notation.
 '''
 
 # System packages
-import argparse
 import sys
 import time
 
 # Numerical packages
-from math import sin, cos
+from math import pi, sin, cos, acos
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import root, fsolve
 
-class TripleVectorial:
+# Kozai modules
+from _kozai_constants import *
+
+class TripleVectorial(object):
   '''Evolve a triple in time using the vectorial equations of motion.  This
   class only applies to a triple in the test particle approximation.  For
-  triples with a massive secondary, use the Triple class.
+  triples with a massive secondary, use the TripleDelaunay class.
   
   Parameters:
     a1: Semi-major axis of inner binary in AU
@@ -29,85 +31,66 @@ class TripleVectorial:
     e1: Eccentricity of inner binary
     e2: Eccentricity of outer binary
     inc: Inclination between inner and outer binaries in degrees
+    g1: Argument of periapsis of the inner binary in degrees
     longascnode: Longitude of ascending node in degrees
-    argperi: Argument of periapsis of the inner binary in degrees
     m1: Mass of component 1 of the inner binary in solar masses
     m3: Mass of the tertiary in solar masses
-    epsoct: epsilon_octupole (without the mass term).  If set, this
-      overrides semi-major axis and outer eccentricity settings.
     tstop: The time to integrate in years
-    cputstop: The maximum amount of CPU time to integrate in seconds
-    outfreq: Print output on every nth step
-    outfilename: Write output to this file.  If None, print to stdout.
+
+  Other parameters:
+    tstop: The time to integrate in years
+    cputstop: The wall time to integrate in seconds
+    outfreq: The number of steps between saving output
     atol: Absolute tolerance of the integrator
-    rtol: Relative tolerance of the integrator
-    integration_algo: The integration algorithm.  See scipy.ode
-      documentation
-    quadrupole: Include the quadrupole term of the potential
-    octupole: Include the octupole term of the potential
+    rotl: Relative tolerance of the integrator
+    quadrupole: Toggle the quadrupole term
+    octupole: Toggle the octupole term
+    algo: Set the integration algorithm (see the scipy.ode docs)
   '''
 
-  def __init__(self, a1=1., a2=20., e1=.1, e2=.3, inc=80., longascnode=180.,
-    argperi=0., m1=1, m3=1, epsoct=None, tstop=1e3, cputstop=300, outfreq=1,
-    outfilename=None, atol=1e-9, rtol=1e-9, integration_algo='vode',
-    quadrupole=True, octupole=True):
+  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, g1=0, m1=1, m3=1,
+    longascnode=180.):
 
-    # Given parameters
-    self.a1 = float(a1)
-    self.a2 = float(a2)
+    # First set the vectorial elements
+    self.jhatvec = np.array([
+      sin(inc) * sin(Omega),
+      -sin(inc) * cos(Omega),
+      cos(inc)])
+    self.jvec = sqrt(1 - e1**2) * self.jhatvec
+
+    ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec, g1 * 
+      pi / 180))
+    self.ehatvec = ehatvec_sol.x
+    self.evec = e1 * self.ehatvec
+
+    self.a1 = a1
+    self.a2 = a2
     self.e1 = e1
     self.e2 = e2
-    self.inc = inc * np.pi / 180
-    self.Omega = longascnode * np.pi / 180
-    self.g1 = argperi * np.pi / 180
+    self.g1 = g1
+    self.Omega = longascnode
     self.m1 = m1
-    self.m2 = 0 # Assume a test particle
+    self.m2 = m2
     self.m3 = m3
-    self._t = 0
+    self.r1 = r1
+    self.r2 = r2
+    self.inc = inc
+    self.t = 0
 
-    self.quadrupole = quadrupole
-    self.octupole = octupole
+    # Default integrator parameters
+    self.tstop = None
+    self.cputstop = 300
+    self.outfreq = 1
+    self.atol = 1e-9
+    self.rtol = 1e-9
+    self.quadrupole = True
+    self.octupole  = True
+    self.algo = 'vode'
+    self.maxoutput = 1e6
+    self.collision = False
 
-    # Derived parameters
-    self.th = np.cos(self.inc)
-    self.j = np.sqrt(1 - self.e1**2)
-
-    if epsoct is None:
-      self.epsoct = self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
-    else:
-      self.epsoct = epsoct
-      self.e2 = None
-      self.a1 = None
-      self.a2 = None
-
-    # Integrals of motion
-    self.Hhatquad = ((2 + 3 * self.e1**2) * (1 - 3 * self.th**2) - 15 *
-      self.e1**2 * (1 - self.th**2) * np.cos(2 * self.g1))
-
-    # The vectorial elements
-    self.jhatvec = np.array([
-      sin(self.inc) * sin(self.Omega),
-      -sin(self.inc) * cos(self.Omega),
-      cos(self.inc)])
-    self.jvec = self.j * self.jhatvec
-
-    ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec, self.g1))
-    self.ehatvec = ehatvec_sol.x
-    self.evec = self.e1 * self.ehatvec
-
-    # Elements of the potential
-    self.Phi0 = 4 * np.pi**2 * self.m3 * self.a1**2 / (self.a2**3 * (1 -
-      self.e2**2)**(3/2.))
-    self.phiq = 0
-    if self.quadrupole:
-      self.phiq += 3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. *
-        self.evec[2]**2 - 1/6.)
-    self.phioct = 0
-    if self.octupole:
-      self.phioct += self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. *
-        self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
-        self.evec[2] * self.jvec[0] * self.jvec[2])
-    self.tsec = 2 * np.pi * np.sqrt(self.m1 * self.a1) / self.Phi0
+    # Store the initial state
+    self.save_as_initial()
 
     self.update()
 
@@ -120,21 +103,174 @@ class TripleVectorial:
     self.integration_algo = integration_algo
     self.y = list(np.concatenate((self.jvec, self.evec)))
 
-    # We have saved some of the initial values (e.g., jvec_0).  Here we set
-    # them to their respective parameters.  (I.e., we set jvec = jvec_0[:].)
-    self._save_initial_params()
+  ###
+  ### Unit conversions & variable definitions
+  ###
+  ### Properties beginning with an underscore are stored in radians or SI
+  ### units.  Most calculations are much easier when done in SI, but it is
+  ### inconvenient for the user to deal with SI units.  Thus, the properties
+  ### can be set using AU, M_sun, degrees, yr, or whatever other units are
+  ### appropriate.
+  ###
 
-    if self.outfilename is not None:
-      self.outfile = open(self.outfilename, 'w')
+  # Times
 
-    # Set up the integrator
-    self.atol = atol
-    self.rtol = rtol
-    self.solver = ode(self._deriv)
-    self.solver.set_integrator(self.integration_algo, nsteps=1, 
-      atol=self.atol, rtol=self.rtol)
-    self.solver.set_initial_value(self.y, self._t).set_f_params(self.epsoct)
-    self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+  @property
+  def t(self):
+    '''Time in yr'''
+    return self._t * self.tsec / yr2s
+
+  @t.setter
+  def t(self, val):
+    '''Set the time in yr'''
+    self._t = val * yr2s / self.tsec
+
+  @property
+  def tsec(self):
+    '''The secular timescale'''
+    return sqrt(G * self._m1 * self._a1) / self.Phi0
+
+  # Masses
+
+  @property
+  def m1(self):
+    '''m1 in solar masses'''
+    return self._m1 / M_sun
+
+  @m1.setter
+  def m1(self, val):
+    '''Set m1 in solar masses'''
+    self._m1 = val * M_sun
+
+  @property
+  def m3(self):
+    '''m3 in solar masses'''
+    return self._m3 / M_sun
+
+  @m3.setter
+  def m3(self, val):
+    '''Set m3 in solar masses'''
+    self._m3 = val * M_sun
+
+  # Distances
+
+  @property
+  def a1(self):
+    '''a1 in AU'''
+    return self._a1 / au
+
+  @a1.setter
+  def a1(self, val):
+    '''Set a1 in AU'''
+    self._a1 = val * au
+
+  @property
+  def a2(self):
+    '''a2 in AU'''
+    return self._a2 / au
+
+  @a2.setter
+  def a2(self, val):
+    '''Set a2 in AU'''
+    self._a2 = val * au
+
+  @property
+  def r1(self):
+    '''r1 in R_sun'''
+    return self._r1 / R_sun
+
+  @r1.setter
+  def r1(self, val):
+    '''r1 in R_sun'''
+    self._r1 = val * R_sun
+
+  @property
+  def r2(self):
+    '''r2 in R_sun'''
+    return self._r2 / R_sun
+
+  @r2.setter
+  def r2(self, val):
+    '''r2 in R_sun'''
+    self._r2 = val * R_sun
+
+  # Angles
+
+  @property
+  def g1(self):
+    '''g1 in degrees'''
+    return self._g1 * 180 / pi
+
+  @g1.setter
+  def g1(self, val):
+    self._g1 = val * pi / 180
+
+  @property
+  def th(self):
+    '''Cosine of the inclination'''
+    return cos(self._inc)
+
+  @property
+  def _inc(self):
+    '''The mutual inclination in radians'''
+    return acos(self.jhatvec[2])
+
+  @property
+  def inc(self):
+    '''The mutual inclination in degrees'''
+    return self._inc * 180 / pi
+
+  # Other parameters
+
+  @property
+  def e1(self):
+    '''The eccentricity of the inner binary'''
+    return np.linalg.norm(self.evec)
+  
+  @property
+  def j(self):
+    '''The normalized angular momentum of the inner binary'''
+    return sqrt(1 - self.e1**2)
+
+  @property
+  def Phi0(self):
+    '''The normalization of the potential.'''
+    return (G * self._m3 * self._a1**2 / (self._a2**3 * (1 -
+      self.e2**2)**(3./2)))
+
+  @property
+  def epsoct(self):
+    '''The strength of the octupole term relative to the quadrupole'''
+    return self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
+
+  @property
+  def Hhatquad(self):
+    '''The normalized quadrupole term of the Hamiltonian'''
+    return ((2 + 3 * self.e1**2) * (1 - 3 * self.th**2) - 15 *
+      self.e1**2 * (1 - self.th**2) * cos(2 * self._g1))
+
+  @property
+  def phiq(self):
+    '''The quadrupole term of the potential'''
+    return (3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. * 
+      self.evec[2]**2 - 1/6.)
+
+  @property
+  def phioct(self):
+    '''The octupole term of the potential'''
+      return (self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. *
+        self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
+        self.evec[2] * self.jvec[0] * self.jvec[2]))
+
+  @property
+  def Th(self):
+    '''Calculate Kozai's integral.'''
+    return (1 - self.e1**2) * cos(self._inc)**2
+
+  @property
+  def CKL(self):
+    '''Calculate the libration constant.'''
+    return self.e1**2 * (1 - 5./2 * sin(self._inc)**2 * sin(self._g1)**2)
 
   def _save_initial_params(self):
     '''Set the variables to their initial values.  Just a clone of
@@ -183,15 +319,6 @@ class TripleVectorial:
     self.t = self._t * self.tsec
     self.e1 = np.linalg.norm(self.evec)
   
-  def calc_Th(self):
-    '''Calculate Kozai's integral.'''
-    self.Th = (1 - self.e1**2) * np.cos(self.inc)**2
-
-  def calc_CKL(self):
-    '''Calculate the libration constant.'''
-    self.CKL = (self.e1**2 * (1 - 5./2 * np.sin(self.inc)**2 *
-      np.sin(self.g1)**2))
-
   def _deriv(self, t, y, epsoct):
     '''The EOMs.  See Eqs. 4 of Katz et al. (2011).'''
 
@@ -230,7 +357,23 @@ class TripleVectorial:
     self.evec = self.solver.y[3:]
     self.update()
 
-  def integrate(self):
+  def integrator_setup(self):
+    '''Set up the integrator.'''
+
+    # Integration parameters
+    self.nstep = 0
+
+    self._y = list(np.r_[self.jvec, self.evec])
+
+    # Set up the integrator
+    self.solver = ode(self._deriv)
+    self.solver.set_integrator(self.algo, nsteps=1, atol=self.atol, 
+      rtol=self.rtol)
+    self.solver.set_initial_value(self._y, self._t)
+    if self.algo == 'vode':
+      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+
+  def evolve(self):
     '''Integrate the triple in time.'''
     self.printout()
     self.tstart = time.time()
@@ -245,7 +388,7 @@ class TripleVectorial:
     if self.outfilename is not None:
       self.outfile.close()
 
-  def ecc_extrema(self):
+  def extrema(self):
     '''Integrate the triple, but only print out on eccentricity extrema.'''
     t_prev = 0
     e_prev = 0
@@ -266,7 +409,7 @@ class TripleVectorial:
     if self.outfilename is not None:
       self.outfile.close()
 
-  def printflips(self):
+  def find_flips(self):
     '''Integrate the triple, but print out only when there is a flip.'''
     t_prev = 0
     e_prev = 0
@@ -336,13 +479,6 @@ class TripleVectorial:
       sign_prev = sign
 
     return np.mean(periods)
-
-  def __exit__(self):
-    try:
-      self.outfile.close()
-    except NameError:
-      pass
-
 
 def _evec_root(x, j, g1):
   '''The set of equations that determine evec.'''
