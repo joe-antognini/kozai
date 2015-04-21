@@ -56,7 +56,7 @@ class TripleDelaunay(object):
     m2=1., m3=1., r1=0, r2=0):
 
     self._H = None
-    self.tstop = 1e3
+    self.tstop = None
 
     self.a1 = a1
     self.a2 = a2
@@ -84,11 +84,10 @@ class TripleDelaunay(object):
     self.gr = False
     self.algo = 'vode'
     self.maxoutput = 1e6
+    self.collision = False
 
     # Store the initial state
-    initial_state = {}
-    initial_state['a1'] = self.a1
-    # etc...
+    self.save_as_initial()
 
   ###
   ### Unit conversions & variable definitions
@@ -122,9 +121,13 @@ class TripleDelaunay(object):
   @m1.setter
   def m1(self, val):
     '''Set m1 in solar masses'''
-    self._m1 = val * M_sun
     if self._H is not None:
-      self.inc = self.inc # Reset the total ang. momentum
+      inc = self.inc
+
+    self._m1 = val * M_sun
+
+    if self._H is not None:
+      self.inc = inc # Reset the total ang. momentum
 
   @property
   def m2(self):
@@ -134,9 +137,13 @@ class TripleDelaunay(object):
   @m2.setter
   def m2(self, val):
     '''Set m2 in solar masses'''
-    self._m2 = val * M_sun
     if self._H is not None:
-      self.inc = self.inc # Reset the total ang. momentum
+      inc = self.inc
+
+    self._m2 = val * M_sun
+
+    if self._H is not None:
+      self.inc = inc # Reset the total ang. momentum
 
   @property
   def m3(self):
@@ -146,9 +153,13 @@ class TripleDelaunay(object):
   @m3.setter
   def m3(self, val):
     '''Set m3 in solar masses'''
-    self._m3 = val * M_sun
     if self._H is not None:
-      self.inc = self.inc # Reset the total ang. momentum
+      inc = self.inc
+
+    self._m3 = val * M_sun
+
+    if self._H is not None:
+      self.inc = inc # Reset the total ang. momentum
 
   # Distances
 
@@ -160,9 +171,13 @@ class TripleDelaunay(object):
   @a1.setter
   def a1(self, val):
     '''Set a1 in AU'''
-    self._a1 = val * au
     if self._H is not None:
-      self.inc = self.inc # Reset the total ang. momentum
+      inc = self.inc
+
+    self._a1 = val * au
+
+    if self._H is not None:
+      self.inc = inc # Reset the total ang. momentum
 
   @property
   def a2(self):
@@ -172,9 +187,13 @@ class TripleDelaunay(object):
   @a2.setter
   def a2(self, val):
     '''Set a2 in AU'''
-    self._a2 = val * au
     if self._H is not None:
-      self.inc = self.inc # Reset the total ang. momentum
+      inc = self.inc
+
+    self._a2 = val * au
+
+    if self._H is not None:
+      self.inc = inc # Reset the total ang. momentum
 
   @property
   def r1(self):
@@ -283,6 +302,23 @@ class TripleDelaunay(object):
   @outfreq.setter
   def outfreq(self, val):
     self._outfreq = int(val)
+
+  def save_as_initial(self):
+    '''Set the current parameters as the initial parameters.'''
+
+    self.initial_state = {}
+    self.initial_state['a1'] = self.a1
+    self.initial_state['a2'] = self.a2
+    self.initial_state['e1'] = self.e1
+    self.initial_state['e2'] = self.e2
+    self.initial_state['g1'] = self.g1
+    self.initial_state['g2'] = self.g2
+    self.initial_state['m1'] = self.m1
+    self.initial_state['m2'] = self.m2
+    self.initial_state['m3'] = self.m3
+    self.initial_state['r1'] = self.r1
+    self.initial_state['r2'] = self.r2
+    self.initial_state['inc'] = self.inc
 
   ###
   ### Integration routines
@@ -510,7 +546,6 @@ class TripleDelaunay(object):
 
     # Integration parameters
     self.nstep = 0
-    self.collision = False # Has a collision occured?
 
     self._y = [self._a1, self.e1, self._g1, self.e2, self._g2, self._H]
 
@@ -522,7 +557,15 @@ class TripleDelaunay(object):
     if self.algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def integrate(self, tstop):
+  def reset(self):
+    '''Reset the triple to its initial configuration.  This resets the
+    orbital parameters and time, but does not reset the integration
+    options.'''
+    self.t = 0
+    for key in self.initial_state:
+      setattr(self, key, self.initial_state[key])
+
+  def evolve(self, tstop):
     '''Integrate the triple in time.
 
     Parameters:
@@ -552,7 +595,7 @@ class TripleDelaunay(object):
 
     return self.integration_steps[:laststep+1]
 
-  def ecc_extrema(self, tstop):
+  def extrema(self, tstop):
     '''Integrate the triple, but only save the eccentricity extrema.
     
     Parameters:
@@ -577,6 +620,9 @@ class TripleDelaunay(object):
       if e_prev2 < e_prev > self.e1:
         self.integration_steps[output_index] = self.state()
         output_index += 1
+      elif e_prev2 > e_prev < self.e1:
+        self.integration_steps[output_index] = self.state()
+        output_index += 1
 
       # Check for collisions
       if self.a1 * (1 - self.e1) < self.r1 + self.r2:
@@ -592,7 +638,7 @@ class TripleDelaunay(object):
 
     return self.integration_steps[:output_index+1]
 
-  def printflips(self):
+  def find_flips(self, tstop):
     '''Integrate the triple, but print out only when there is a flip.'''
 
     self.tstop = tstop
@@ -617,7 +663,7 @@ class TripleDelaunay(object):
         sign_prev = np.sign(self.th)
       t_prev = self.t
       e_prev2 = e_prev
-      e_prev = e
+      e_prev = self.e1
 
     # Print the last step
     self.integration_steps[output_index] = self.state()
@@ -633,27 +679,28 @@ class TripleDelaunay(object):
     return (self.t, self.a1, self.e1, self.g1, self.a2, self.e2, self.g2, 
       self.inc)
   
-  def ts_printout(self):
-    '''Print out the state of the system in the format:
-      
-      t  a1  e1  g1  e2  g2  inc (deg)
-      
-    '''
-
-    outstring = ' '.join(map(str, [self.t, self.a1, self.e1, 
-      self.g1, self.e2, self.g2, self.inc]))
-
-    if self.outfilename is None:
-      print outstring
-    else:
-      self.outfile.write(outstring + '\n')
-
   def __repr__(self):
     '''Print out the initial values in JSON format.'''
 
     # for key in initial_state:
     #   etc...
 
-    json_data = self.__dict__
-    outstring = json.dumps(json_data, sort_keys=True, indent=2)
-    return outstring
+    # Get the initial state
+    json_data = self.initial_state
+
+    # Add some other properties
+    json_data['tstop'] = self.tstop
+    json_data['cputstop'] = self.cputstop
+    json_data['outfreq'] = self.outfreq
+    json_data['outfile'] = self.outfile
+    json_data['atol'] = self.atol
+    json_data['rtol'] = self.rtol
+    json_data['quadrupole'] = self.quadrupole
+    json_data['octupole'] = self.octupole
+    json_data['hexadecapole'] = self.hexadecapole
+    json_data['gr'] = self.gr
+    json_data['algo'] = self.algo
+    json_data['maxoutput'] = self.maxoutput
+    json_data['collision'] = self.collision
+
+    return json.dumps(json_data, sort_keys=True, indent=2)
