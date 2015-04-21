@@ -23,3 +23,13 @@
 Profiling (possible bottlenecks):
   - Frequent clock checks
   - Dynamically calculating cosphi, etc.
+
+Tutorial:
+  - Create a triple
+  - Integrate the triple
+  - Plot the eccentricity, g1, inc, etc.
+  - Show the maximum eccentricity as a function of inclination, TPQ
+  - Show the inclination at which maximum eccentricity is reached as a
+    function of m2
+  - Period calculation
+  - Period as a function of inclination
