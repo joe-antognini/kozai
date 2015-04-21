@@ -16,7 +16,6 @@ import time
 from math import sqrt, cos, sin, pi, acos
 import numpy as np
 from scipy.integrate import ode, quad
-from scipy.optimize import root, fsolve
 from _kozai_constants import *
 
 class TripleDelaunay(object):
@@ -56,7 +55,9 @@ class TripleDelaunay(object):
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, g1=0, g2=0, m1=1., 
     m2=1., m3=1., r1=0, r2=0):
 
+    self._H = None
     self.tstop = 1e3
+
     self.a1 = a1
     self.a2 = a2
     self.e1 = e1
@@ -69,6 +70,7 @@ class TripleDelaunay(object):
     self.r1 = r1
     self.r2 = r2
     self.inc = inc
+    self.t = 0
 
     # Default integrator parameters
     self.cputstop = 300
@@ -82,6 +84,11 @@ class TripleDelaunay(object):
     self.gr = False
     self.algo = 'vode'
     self.maxoutput = 1e6
+
+    # Store the initial state
+    initial_state = {}
+    initial_state['a1'] = self.a1
+    # etc...
 
   ###
   ### Unit conversions & variable definitions
@@ -116,6 +123,8 @@ class TripleDelaunay(object):
   def m1(self, val):
     '''Set m1 in solar masses'''
     self._m1 = val * M_sun
+    if self._H is not None:
+      self.inc = self.inc # Reset the total ang. momentum
 
   @property
   def m2(self):
@@ -126,6 +135,8 @@ class TripleDelaunay(object):
   def m2(self, val):
     '''Set m2 in solar masses'''
     self._m2 = val * M_sun
+    if self._H is not None:
+      self.inc = self.inc # Reset the total ang. momentum
 
   @property
   def m3(self):
@@ -136,6 +147,8 @@ class TripleDelaunay(object):
   def m3(self, val):
     '''Set m3 in solar masses'''
     self._m3 = val * M_sun
+    if self._H is not None:
+      self.inc = self.inc # Reset the total ang. momentum
 
   # Distances
 
@@ -148,6 +161,8 @@ class TripleDelaunay(object):
   def a1(self, val):
     '''Set a1 in AU'''
     self._a1 = val * au
+    if self._H is not None:
+      self.inc = self.inc # Reset the total ang. momentum
 
   @property
   def a2(self):
@@ -158,6 +173,8 @@ class TripleDelaunay(object):
   def a2(self, val):
     '''Set a2 in AU'''
     self._a2 = val * au
+    if self._H is not None:
+      self.inc = self.inc # Reset the total ang. momentum
 
   @property
   def r1(self):
@@ -492,7 +509,6 @@ class TripleDelaunay(object):
     '''Set up the integrator.'''
 
     # Integration parameters
-    self.t = 0
     self.nstep = 0
     self.collision = False # Has a collision occured?
 
@@ -514,11 +530,10 @@ class TripleDelaunay(object):
     '''
     
     self.tstop = tstop
-    n_columns = 7
+    n_columns = len(self.state())
     self.integrator_setup()
     self.integration_steps = np.zeros((self.maxoutput, n_columns))
-    self.integration_steps[0] = [self.t, self.a1, self.e1, self.g1, 
-      self.e2, self.g2, self.inc]
+    self.integration_steps[0] = self.state()
 
     self.tstart = time.time()
     while ((self.t < tstop) and 
@@ -526,65 +541,98 @@ class TripleDelaunay(object):
 
       self._step()
       if self.nstep % self.outfreq == 0:
-        self.integration_steps[int(self.nstep / self.outfreq)] = [self.t, 
-          self.a1, self.e1, self.g1, self.e2, self.g2, self.inc]
+        self.integration_steps[self.nstep/self.outfreq] = self.state()
 
       if self.a1 * (1 - self.e1) < self.r1 + self.r2:
         self.collision = True
         break
 
-    laststep = int(self.nstep / self.outfreq) + 1
-    self.integration_steps[laststep] = [self.t, 
-      self.a1, self.e1, self.g1, self.e2, self.g2, self.inc]
+    laststep = (self.nstep / self.outfreq) + 1
+    self.integration_steps[laststep] = self.state()
 
     return self.integration_steps[:laststep+1]
 
-  def ecc_extrema(self):
-    '''Integrate the triple, but only print out on eccentricity extrema.'''
+  def ecc_extrema(self, tstop):
+    '''Integrate the triple, but only save the eccentricity extrema.
+    
+    Parameters:
+      tstop: The time to integrate in years
+    '''
 
+    self.tstop = tstop
+    n_columns = len(self.state())
     self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+    self.integration_steps[0] = self.state()
 
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
+    output_index = 1
     self.tstart = time.time()
     while (self.t < self.tstop and 
       time.time() - self.tstart < self.cputstop):
+
       self._step()
       if e_prev2 < e_prev > self.e1:
-        outstring = ' '.join(map(str, [t_prev, e_prev]))
-        if self.outfilename is None:
-          print outstring
-        else:
-          self.outfile.write(outstring + '\n')
+        self.integration_steps[output_index] = self.state()
+        output_index += 1
+
+      # Check for collisions
+      if self.a1 * (1 - self.e1) < self.r1 + self.r2:
+        self.collision = True
+        break
+
       t_prev = self.t
       e_prev2 = e_prev
       e_prev = self.e1
 
+    # Print the last step
+    self.integration_steps[output_index] = self.state()
+
+    return self.integration_steps[:output_index+1]
+
   def printflips(self):
     '''Integrate the triple, but print out only when there is a flip.'''
 
+    self.tstop = tstop
+    n_columns = len(self.state())
     self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+    self.integration_steps[0] = self.state()
 
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
     sign_prev = np.sign(self.th)
-    while self.t < self.tstop:
+    output_index = 1
+    self.tstart = time.time()
+    while (self.t < self.tstop and 
+      time.time() - self.tstart < self.cputstop):
       self._step()
       if e_prev2 < e_prev > self.e1:
         if np.sign(self.th) != sign_prev:
-          outstring = ' '.join(map(str, [t_prev, e_prev]))
-          if self.outfilename is None:
-            print outstring
-          else:
-            self.outfile.write(outstring + '\n')
+          self.integration_steps[output_index] = self.state()
+          output_index += 1
         sign_prev = np.sign(self.th)
       t_prev = self.t
       e_prev2 = e_prev
       e_prev = e
-    self.outfile.close()
 
+    # Print the last step
+    self.integration_steps[output_index] = self.state()
+
+    return self.integration_steps[:output_index+1]
+
+  def state(self):
+    '''Return a tuple with the dynamical state of the system.
+
+    Returns:
+      (t, a1, e1, g1, a2, e2, g2, inc)
+    '''
+    return (self.t, self.a1, self.e1, self.g1, self.a2, self.e2, self.g2, 
+      self.inc)
+  
   def ts_printout(self):
     '''Print out the state of the system in the format:
       
@@ -602,6 +650,9 @@ class TripleDelaunay(object):
 
   def __repr__(self):
     '''Print out the initial values in JSON format.'''
+
+    # for key in initial_state:
+    #   etc...
 
     json_data = self.__dict__
     outstring = json.dumps(json_data, sort_keys=True, indent=2)
