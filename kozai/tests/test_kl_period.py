@@ -41,7 +41,8 @@ def test_numerical_kl_period_vectorial():
   tv = TripleVectorial(a1=1, a2=20, e1=.1, e2=.3, m1=1, m3=1, g1=0,
     Omega=180)
   tv.octupole = False
-  assert_allclose(numerical_kl_period(tv, nperiods=3), 4368.4247305281269)
+  assert_allclose(numeric_kl_period(tv, nperiods=3), 4201.6634127,
+    rtol=1e-3, atol=1e-3)
 
 def test_numerical_kl_period_delaunay():
   '''See if the numerical calculation of the KL period by explicitly
@@ -51,4 +52,5 @@ def test_numerical_kl_period_delaunay():
   t = TripleDelaunay(a1=1, a2=20, e1=.1, e2=.3, m1=1, m2=1, m3=1, g1=0, 
     g2=0)
   t.octupole = False
-  assert_allclose(numerical_kl_period(t, nperiods=3), 5862.9998908353418)
+  assert_allclose(numeric_kl_period(t, nperiods=3), 5866.384706, rtol=1e-3,
+    atol=1e-3)

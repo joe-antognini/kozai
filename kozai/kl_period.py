@@ -91,7 +91,7 @@ def kl_period(triple):
 
   return L1toC2 * kl_period_norm(triple.Hhatquad, triple.Th) / 15
 
-def numerical_kl_period(triple, nperiods=3):
+def numeric_kl_period(triple, nperiods=3, tstop=1e6):
   '''Calculate the period of KL oscillations by explicitly integrating the
   secular equations of motion.
 
@@ -102,6 +102,9 @@ def numerical_kl_period(triple, nperiods=3):
   Output:
     The average period of KL oscillations in yr.
   '''
+
+  triple.tstop = tstop
+  triple.integrator_setup()
 
   e_prev2 = 0.
   e_prev  = 0.
