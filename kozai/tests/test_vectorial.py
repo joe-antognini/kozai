@@ -3,7 +3,7 @@
 import json
 from numpy.testing import assert_allclose
 
-from ..vectorial import TripleVectorial
+from kozai.vectorial import TripleVectorial
 
 ###
 ### Object creation tests

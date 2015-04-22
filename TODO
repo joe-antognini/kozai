@@ -2,7 +2,6 @@
 - Remove long init declaration
 - Add params file support
 - Store results rather than write (write to tmp if tool large)
-- Make a better __repr__ method
 - IntegrationTimeout exception class
 - Update tests
 - Make an Ipython notebook tutorial
@@ -19,6 +18,7 @@
 - Make delaunay and vectorial modules.
 - Allow TripleDelaunay to be set by epsoct
 - Allow tstop to be set in Kozai timescales as well as yr
+- Add support for tides
 
 Profiling (possible bottlenecks):
   - Frequent clock checks
@@ -33,3 +33,9 @@ Tutorial:
     function of m2
   - Period calculation
   - Period as a function of inclination
+  - Some famous plots from the literature:
+    - Figs. 3, 4, 5 of Ford et al. (2000)
+    - Figs. 1, 2, & 3 from Blaes et al. (2002)
+    - Fig. 1 Naoz et al. (2011)
+    - Fig. 2 of Katz et al. (2011)
+    - Fig. 11 of Naoz et al. (2013)

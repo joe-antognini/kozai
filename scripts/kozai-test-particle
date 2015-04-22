@@ -6,6 +6,8 @@ kozai-test-particle
 Evolve a triple from the command line.
 '''
 
+import argparse
+import numpy as np
 import sys
 from kozai.vectorial import TripleVectorial
 
@@ -19,6 +21,7 @@ def process_command_line(argv):
   parser = argparse.ArgumentParser()
 
   def_trip = TripleVectorial()
+  default_tstop = 1e3
   parser.add_argument('-m', '--m1', dest='m1', type=float, 
     default=def_trip.m1, help = 
     'Mass of star 1 in inner binary in solar masses [%g]' % def_trip.m1,
@@ -34,8 +37,8 @@ def process_command_line(argv):
     'Outer semi-major axis in au [%g]' % def_trip.a2, metavar='\b')
   parser.add_argument('-g', '--g1', dest='g1', type=float, 
     default=def_trip.g1, help = 
-    'Inner argument of periapsis in degrees [%g]' % (def_trip.g1 * 180 /
-      np.pi), metavar='\b')
+    'Inner argument of periapsis in degrees [%g]' % def_trip.g1,
+      metavar='\b')
   parser.add_argument('-L', '--Omega', dest='Omega', type=float, 
     default=def_trip.Omega, help = 
     'Longitude of ascending node in degrees [%g]' % def_trip.Omega,
@@ -51,8 +54,8 @@ def process_command_line(argv):
     'Inclination of the third body in degrees [%g]' % def_trip.inc,
     metavar='\b')
   parser.add_argument('-t', '--end', dest='tstop', type=float, 
-    default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
-    % def_trip.tstop, metavar='\b')
+    default=default_tstop, help = 'Total time of integration in years [%g]' 
+    % default_tstop, metavar='\b')
   parser.add_argument('-C', '--cpu', dest='cputstop', type=float, 
     default=def_trip.cputstop, help = 
     'cpu time limit in seconds, if -1 then no limit [%g]' %
@@ -74,8 +77,8 @@ def process_command_line(argv):
   parser.add_argument('--nooct', dest='oct', action='store_false',
     default=def_trip.octupole, help = 'Turn off octupole terms')
   parser.add_argument('--algorithm', dest='algo', type=str,
-    default=def_trip.integration_algo, help = 'Integration algorithm [%s]' 
-    % def_trip.integration_algo)
+    default=def_trip.algo, help = 'Integration algorithm [%s]' 
+    % def_trip.algo)
 
   arguments = parser.parse_args()
   return arguments
@@ -84,8 +87,9 @@ def main(argv=None):
   args = process_command_line(argv)
   tv = TripleVectorial()
 
-  for elem in args:
-    setattr(tv, elem, args[elem])
+  for elem in args.__dict__:
+    print elem
+    setattr(tv, elem, args.__dict__[elem])
 
   ev = tv.evolve(args.tstop)
   for elem in ev:

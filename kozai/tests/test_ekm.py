@@ -3,7 +3,7 @@
 import json
 from numpy.testing import assert_allclose
 
-from ..ekm import *
+from kozai.ekm import *
 
 ###
 ### Function tests

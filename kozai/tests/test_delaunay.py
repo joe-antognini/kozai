@@ -3,7 +3,7 @@
 import json
 from numpy.testing import assert_allclose
 
-from ..delaunay import TripleDelaunay
+from kozai.delaunay import TripleDelaunay
 
 ###
 ### Object creation tests

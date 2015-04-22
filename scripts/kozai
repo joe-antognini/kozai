@@ -4,6 +4,7 @@
 Evolve a triple from the command line.
 '''
 
+import argparse
 import sys
 from kozai.delaunay import TripleDelaunay
 
@@ -17,6 +18,7 @@ def process_command_line(argv):
   parser = argparse.ArgumentParser()
 
   def_trip = TripleDelaunay()
+  default_tstop = 1e3
   parser.add_argument('-m', '--m1', dest='m1', type=float, 
     default=def_trip.m1, help = 
     'Mass of star 1 in inner binary in solar masses [%g]' % def_trip.m1,
@@ -61,8 +63,8 @@ def process_command_line(argv):
     'Inclination of the third body in degrees [%g]' % def_trip.inc,
     metavar='\b')
   parser.add_argument('-t', '--tstop', dest='tstop', type=float, 
-    default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
-    % def_trip.tstop, metavar='\b')
+    default=default_tstop, help = 'Total time of integration in years [%g]' 
+    % default_tstop, metavar='\b')
   parser.add_argument('-C', '--cpu', dest='cputstop', type=float, 
     default=def_trip.cputstop, help = 
     'cpu time limit in seconds, if -1 then no limit [%g]' %
@@ -92,8 +94,8 @@ def main(argv=None):
   args = process_command_line(argv)
   t = TripleDelaunay()
 
-  for elem in args:
-    setattr(t, elem, args[elem])
+  for elem in args.__dict__:
+    setattr(t, elem, args.__dict__[elem])
 
   ev = t.evolve(args.tstop)
   for elem in ev:

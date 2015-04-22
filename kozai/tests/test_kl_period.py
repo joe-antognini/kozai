@@ -1,9 +1,9 @@
 #! /usr/bin/env python
 
 from numpy.testing import assert_allclose
-from ..delaunay import TripleDelaunay
-from ..vectorial import TripleVectorial
-from ..kl_period import *
+from kozai.delaunay import TripleDelaunay
+from kozai.vectorial import TripleVectorial
+from kozai.kl_period import *
 
 def test_P_out():
   '''Test the P_out calculation.'''

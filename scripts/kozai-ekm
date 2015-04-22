@@ -6,8 +6,10 @@ kozai-ekm
 Evolve TripleOctupole from the command line.
 '''
 
+import argparse
+import numpy as np
 import sys
-from triple.ekm import TripleOctupole
+from kozai.ekm import TripleOctupole
 
 def process_command_line(argv):
   '''Process the command line.'''
@@ -18,34 +20,26 @@ def process_command_line(argv):
   # Configure the command line options
   parser = argparse.ArgumentParser()
 
-  def_trip = Triple_octupole()
-  parser.add_argument('-a', '--a1', dest='a1', type=float, 
-    default=def_trip.a1, help = 
-    'Inner semi-major axis in au [%g]' % def_trip.a1, metavar='\b')
-  parser.add_argument('-b', '--a2', dest='a2', type=float, 
-    default=def_trip.a2, help = 
-    'Outer semi-major axis in au [%g]' % def_trip.a2, metavar='\b')
+  def_trip = TripleOctupole()
+  default_tstop = 100
   parser.add_argument('-e', '--e1', dest='e1', type=float, 
     default=def_trip.e1, help = 
     'Inner eccentricity [%g]' % def_trip.e1, metavar='\b')
-  parser.add_argument('-f', '--e2', dest='e2', type=float, 
-    default=def_trip.e2, help = 
-    'Outer eccentricity [%g]' % def_trip.e2, metavar='\b')
   parser.add_argument('-i', '--inc', dest='inc', type=float,
     default=def_trip.inc, help = 
     'Inclination of the third body in degrees [%g]' % def_trip.inc,
     metavar='\b')
   parser.add_argument('-g', '--g1', dest='g1', type=float, 
-    default=def_trip.omega, help = 
-    'Inner argument of periapsis in degrees [%g]' % (def_trip.omega * 180 
-      / np.pi), metavar='\b')
+    default=def_trip.g1, help = 
+    'Inner argument of periapsis in degrees [%g]' % def_trip.g1,
+      metavar='\b')
   parser.add_argument('-L', '--Omega', dest='Omega', type=float, 
     default=def_trip.Omega, help = 
     'Longitude of ascending node in degrees [%g]' % def_trip.Omega,
     metavar='\b')
   parser.add_argument('-t', '--end', dest='tstop', type=float, 
-    default=def_trip.tstop, help = 'Total time of integration in years [%g]' 
-    % def_trip.tstop, metavar='\b')
+    default=default_tstop, help = 'Total time of integration in years [%g]' 
+    % default_tstop, metavar='\b')
   parser.add_argument('-C', '--cpu', dest='cputstop', type=float, 
     default=def_trip.cputstop, help = 
     'cpu time limit in seconds, if -1 then no limit [%g]' %
@@ -67,8 +61,8 @@ def process_command_line(argv):
   parser.add_argument('--chi', dest='chi', type=float, help =
     'Set the constant chi (override e1, g1, and Omega)', metavar='\b')
   parser.add_argument('--algorithm', dest='algo', type=str,
-    default=def_trip.integration_algo, help = 'Integration algorithm [%s]' 
-    % def_trip.integration_algo)
+    default=def_trip.algo, help = 'Integration algorithm [%s]' 
+    % def_trip.algo)
 
   arguments = parser.parse_args()
   return arguments
@@ -77,8 +71,8 @@ def main(argv=None):
   args = process_command_line(argv)
   to = TripleOctupole()
 
-  for elem in args:
-    setattr(to, elem, args[elem])
+  for elem in args.__dict__:
+    setattr(to, elem, args.__dict__[elem])
 
   ev = to.evolve(args.tstop)
   for elem in ev:
