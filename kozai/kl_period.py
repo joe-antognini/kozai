@@ -17,7 +17,7 @@ import numpy as np
 from scipy.integrate import quad
 
 # Other modules from this package
-from ts_constants import *
+from _kozai_constants import *
 
 def P_out(triple):
   '''Return the outer period of a hierarchical triple in years.'''

@@ -89,3 +89,15 @@ def test_cputimeout():
   tv.cputstop = .1
   tv.evolve(large_time)
   assert tv.t < large_time
+
+def test_reset():
+  '''Try to reset the triple.'''
+  tv = TripleVectorial()
+  tstop = 1e3
+  burn = tv.evolve(tstop)
+  tv.reset()
+  ev1 = tv.evolve(tstop)
+  tv.reset()
+  ev2 = tv.evolve(tstop)
+  assert_allclose(ev1[-1], ev2[-1], rtol=1e-2, atol=1e-2)
+

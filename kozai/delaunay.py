@@ -8,7 +8,6 @@ Numerically integrate the dynamics of a hierarchical triple.
 
 # System modules
 import json
-import random
 import time
 
 # Numerical modules
@@ -683,9 +682,6 @@ class TripleDelaunay(object):
   
   def __repr__(self):
     '''Print out the initial values in JSON format.'''
-
-    # for key in initial_state:
-    #   etc...
 
     # Get the initial state
     json_data = self.initial_state

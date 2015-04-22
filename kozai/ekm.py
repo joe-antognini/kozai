@@ -8,19 +8,19 @@ a hierarchical triple.  This procedure averages over not only the
 individual orbits, but also the individual KL cycles as well.
 '''
 
-# System packages
+# System modules
 import json
 import time
 
-# Numerical packages
-from math import pi, sin, cos, sqrt
+# Numerical modules
+from math import acos, cos, pi, sin, sqrt
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import brentq
 from scipy.special import ellipk, ellipe
 
-# Triplesec packages
-from ts_constants import *
+# Kozai modules
+from _kozai_constants import *
 
 class TripleOctupole(object):
   '''A hierachical triple where only the octupole term of the Hamiltonian is
@@ -28,15 +28,12 @@ class TripleOctupole(object):
 
   Parameters:
     e1: Inner eccentricity
-    e2: Outer eccentricity
-    a1: Inner semi-major axis in AU
-    a2: OUter semi-major axis in AU
     inc: Inclination in degrees
     g1: Argument of periastron in degrees
     Omega: Longitude of ascending node in degrees
+    epsoct: The relative strength of the octupole to quadrupole terms
 
   Other parameters:
-    epsoct: e2 / (1 - e2^2) * (a1 / a2)
     phiq: The value of the quadrupole term of the Hamiltonian
     chi: The other integral of motion of the octupole term
 
@@ -48,109 +45,61 @@ class TripleOctupole(object):
     rtol: Relative tolerance of the integrator
   '''
 
-  def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, Omega=180,
-    g1=0, epsoct=None, phiq=None, chi=None):
+  def __init__(self, e1=.1, inc=80, Omega=180, g1=0, epsoct=1e-2, 
+    phiq=None, chi=None):
+    
+    if (phiq is None and chi is not None) or (phiq is not None and chi is
+      None):
+      raise ValueError('Either phiq and chi must both be set or neither')
 
-    #
-    # Given parameters
-    #
-    self.a1 = float(a1)
-    self.a2 = float(a2)
-    self.e1 = e1
-    self.e2 = e2
-    self.inc = inc
-    self.Omega = Omega
-    self.g1 = g1
+    self.epsoct = epsoct
 
-    #
-    # Derived parameters
-    #
-    self.cosi = np.cos(inc * np.pi / 180)
-    self.j = np.sqrt(1 - e1**2)
-    self.jz = self.j * self.cosi
+    if phiq is None:
+      _inc = inc * pi / 180
+      self.e1 = e1
+      self.Omega = Omega
+      self.g1 = g1
 
-    # We don't use calc_CKL() at first because we need CKL to calculate chi.
-    self.CKL = (self.e1**2 * (1 - 5/2. * (1 - self.cosi**2) *
-      np.sin(self.omega)**2))
+      CKL = self.e1**2 * (1 - 5/2. * sin(_inc)**2 * sin(self._g1)**2)
+      self.jz = sqrt(1 - self.e1**2) * cos(_inc)
 
-    #
+      self._phiq = CKL + self.jz**2 / 2
+      self._chi = F(CKL) - self.epsoct * cos(self._Omega)
+
+    else:
+      self.phiq = phiq
+      self.chi = chi
+      self.e1 = None
+      self._g1 = None
+
     # Integration parameters
-    #
     self.tstop = None
     self.t = 0
     self.nstep = 0
     self.cputstop = 300
     self.outfreq = 1
-    self.integration_algo = 'vode'
+    self.algo = 'vode'
     self.atol = 1e-9
     self.rtol = 1e-9
+    self.tol = 1e-5
+    self.maxoutput = 1e6
 
-  @property
-  def a1(self):
-    return self._a1 / au
-
-  @a1.setter
-  def a1(self, val):
-    if val is not None:
-      self._a1 = val * au
-    else:
-      self._a1 = None
-
-  @property
-  def a2(self):
-    return self._a2 / au
-
-  @a2.setter
-  def a2(self, val):
-    if val is not None:
-      self._a2 = val * au
-    else:
-      self._a2 = None
-
-  @property
-  def inc(self):
-    return self._inc * 180 / pi
-
-  @inc.setter
-  def inc(self, val):
-    self._inc = val * pi / 180
-
-  @property
-  def Omega(self):
-    return self._Omega * 180 / pi
-
-  @Omega.setter
-  def Omega(self, val):
-    self._Omega = val * pi / 180
-
-  @property
-  def g1(self):
-    return self._g1 * 180 / pi
-
-  @g1.setter
-  def g1(self, val):
-    self._g1 = val * pi / 180
-
-  @property
-  def phiq(self):
-    return self.CKL + self.jz**2 / 2.
-
-  @phiq.setter
-  def phiq(self, val):
-    self.CKL = val
-    self.jz = 0
+    # Store the initial state
+    self.save_as_initial()
 
   @property
   def chi(self):
-    return F(self.CKL) - self.epsoct * cos(self.Omega)
+    return self._chi
 
   @chi.setter
   def chi(self, val):
-    self.Omega = np.arccos((F(self.CKL) - self.chi) / self.epsoct)
+    self._chi = val
+    self._Omega = acos((F(self.CKL) - val) / self.epsoct)
 
   @property
-  def x(self):
-    return (3 - 3 * self.CKL) / (3 + 2 * self.CKL)
+  def CKL(self):
+    '''The libration constant'''
+    return self.phiq - self.jz**2 / 2.
 
   @property
   def fj(self):
@@ -162,13 +111,73 @@ class TripleOctupole(object):
     return ((6 * ellipe(self.x) - 3 * ellipk(self.x)) / (4 *
       ellipk(self.x)))
 
+  @property
+  def g1(self):
+    return self._g1 * 180 / pi
+
+  @g1.setter
+  def g1(self, val):
+    self._g1 = val * pi / 180
+
+  @property
+  def inc(self):
+    return acos(self.jz / sqrt(1 - self.e1**2)) * 180 / pi
+
+  @property
+  def Omega(self):
+    return self._Omega * 180 / pi
+
+  @Omega.setter
+  def Omega(self, val):
+    self._Omega = val * pi / 180
+
+  @property
+  def phiq(self):
+    return self._phiq
+
+  @phiq.setter
+  def phiq(self, val):
+    self._phiq = val
+    self.jz = 0
+
+    self._a1 = None
+    self._a2 = None
+    self._e2 = None
+
+  @property
+  def t(self):
+    return self._t
+
+  @t.setter
+  def t(self, val):
+    self._t = val
+  
+  @property
+  def x(self):
+    return (3 - 3 * self.CKL) / (3 + 2 * self.CKL)
+
+  def save_as_initial(self):
+    '''Set the current parameters as the initial parameters.'''
+
+    self.initial_state = {}
+    self.initial_state['Omega'] = self.Omega
+    self.initial_state['CKL'] = self.CKL
+    self.initial_state['jz'] = self.jz
+    self.initial_state['phiq'] = self.phiq
+    self.initial_state['chi'] = self.chi
+
+    if self.e1 is not None:
+      self.initial_state['g1'] = self.g1
+      self.initial_state['e1'] = self.e1
+      self.initial_state['inc'] = self.inc
+
   def integrator_setup(self):
     '''Set up the integrator.'''
 
     # Integration parameters
     self.nstep = 0
 
-    self._y = [self.jz, self.Omega]
+    self._y = [self.jz, self._Omega]
 
     # Set up the integrator
     self.solver = ode(self._deriv)
@@ -177,6 +186,26 @@ class TripleOctupole(object):
     self.solver.set_initial_value(self._y, self._t)
     if self.algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+
+  def reset(self):
+    '''Reset the triple to its initial configuration.  This resets the
+    orbital parameters and time, but does not reset the integration
+    options.'''
+    self.t = 0
+    if self.e1 is None:
+      self.phiq = self.initial_state['phiq']
+      self.chi = self.initial_state['chi']
+    else:
+      self.e1 = self.initial_state['e1']
+      self.Omega = self.initial_state['Omega']
+      self.g1 = self.initial_state['g1']
+      _inc = self.initial_state['inc'] * pi / 180
+
+      CKL = self.e1**2 * (1 - 5/2. * sin(_inc)**2 * sin(self._g1)**2)
+      self.jz = sqrt(1 - self.e1**2) * cos(_inc)
+
+      self._phiq = CKL + self.jz**2 / 2
+      self._chi = F(CKL) - self.epsoct * cos(self._Omega)
 
   def _deriv(self, t, y):
     # Eqs. 11 of Katz (2011)
@@ -190,31 +219,35 @@ class TripleOctupole(object):
   def _step(self):
     self.solver.integrate(self.tstop, step=True)
     self.t = self.solver.t
-    self.jz, self.Omega = self.solver.y
+    self.jz, self._Omega = self.solver.y
     self.nstep += 1
 
-  def set_CKL(self):
-    self.CKL = self.calc_CKL()
-
-  def calc_CKL(self):
-    return self.phiq - self.jz**2 / 2.
-
   def evolve(self, tstop):
-    '''Integrate the triple in time.'''
-    self.printout()
+    '''Integrate the triple in time.
+    
+    Parameters:
+      tstop: The time to integrate in units of the secular time.'''
+
+    self.tstop = tstop
+    n_columns = len(self.state())
+    self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+    self.integration_steps[0] = self.state()
 
     self.tstart = time.time()
-    while ((self.t < self.tstop) and 
+    while ((self.t < tstop) and 
       ((time.time() - self.tstart) < self.cputstop)):
+
       self._step()
       if self.nstep % self.outfreq == 0:
-        self.printout()
+        self.integration_steps[self.nstep/self.outfreq] = self.state()
 
-    self.printout()
-    if self.outfilename is not None:
-      self.outfile.close()
+    laststep = (self.nstep / self.outfreq) + 1
+    self.integration_steps[laststep] = self.state()
 
-  def period(self):
+    return self.integration_steps[:laststep+1]
+
+  def flip_period(self):
     '''Analytically calculate the period of EKM oscillations.'''
 
     # First calculate the limits. 
@@ -243,14 +276,23 @@ class TripleOctupole(object):
 
     return P[0]
 
-  def numeric_period(self, n_flips=3):
+  def numeric_flip_period(self, n_flips=3, tstop=1e6):
     '''Calculate the period of EKM oscillations by integrating the EOMs and
     taking the average flip time for n_flips flips.'''
+
+    self.tstop = tstop
+    n_columns = len(self.state())
+    self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+    self.integration_steps[0] = self.state()
 
     t_flip_prev = 0
     sign_prev = np.sign(self.jz)
     periods = []
-    while (len(periods) < n_flips) and (self.t < self.tstop):
+    self.tstart = time.time()
+    while ((len(periods) < n_flips) and (self.t < self.tstop) and
+      ((time.time() - self.tstart) < self.cputstop)):
+
       self._step()
       if np.sign(self.jz) != sign_prev:
         if t_flip_prev != 0:
@@ -290,6 +332,22 @@ class TripleOctupole(object):
     return (self.t, self.jz, self.Omega, self.fj, self.fOmega, self.x,
       self.CKL)
 
+  def __repr__(self):
+    '''Print out the initial values in JSON format.'''
+
+    # Get the initial state
+    json_data = self.initial_state
+
+    # Add some other properties
+    json_data['tstop'] = self.tstop
+    json_data['cputstop'] = self.cputstop
+    json_data['outfreq'] = self.outfreq
+    json_data['atol'] = self.atol
+    json_data['rtol'] = self.rtol
+    json_data['algo'] = self.algo
+    json_data['maxoutput'] = self.maxoutput
+
+    return json.dumps(json_data, sort_keys=True, indent=2)
 def _F_integrand(x):
   return (ellipk(x) - 2 * ellipe(x)) / (41*x - 21) / np.sqrt(2*x + 3)
 
