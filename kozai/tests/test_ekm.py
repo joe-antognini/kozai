@@ -89,10 +89,10 @@ def test_flip_period():
   '''Test the analytic flip period calculation'''
   t = TripleOctupole(e1=.1, inc=80, Omega=180, g1=0, epsoct=1e-2)
   p = t.flip_period()
-  assert_allclose(p, 123.6079642436734)
+  assert_allclose(p, 123.6079642436734, atol=1e-3, rtol=1e-3)
 
 def test_numeric_flip_period():
   '''Test the numeric calculation of the flip period'''
   t = TripleOctupole(e1=.1, inc=80, Omega=180, g1=0, epsoct=1e-2)
   p = t.numeric_flip_period(n_flips=3) 
-  assert_allclose(p, 123.58242387832222)
+  assert_allclose(p, 123.58242387832222, atol=1e-3, rtol=1e-3)

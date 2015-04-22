@@ -31,7 +31,7 @@ def test_kl_period():
   '''Test the KL period semi-analytic calculation.'''
   tv = TripleVectorial(a1=1, a2=20, e1=.1, e2=.3, m1=1, m3=1,
         g1=0, Omega=np.pi)
-  assert_allclose(kl_period(tv), 4195.8240184679735)
+  assert_allclose(kl_period(tv), 4195.8240184679735, atol=1e-5, rtol=1e-5)
 
 def test_numerical_kl_period_vectorial():
   '''See if the numerical calculation of the KL period by explicitly
