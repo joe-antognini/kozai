@@ -27,13 +27,14 @@ def readme():
     return f.read()
 
 setup(name='kozai',
-      version='0.1',
+      version='0.1.1',
       description='Evolve hierarchical triples',
       long_description=readme(),
       classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 2.7',
         'Topic :: Scientific/Engineering :: Astronomy',
         'Topic :: Scientific/Engineering :: Physics'],
       keywords='kozai lidov triple dynamics orbit star',
