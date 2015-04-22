@@ -9,7 +9,6 @@ Numerically integrate the dynamics of a hierarchical triple.
 # System modules
 import json
 import random
-import sys
 import time
 
 # Numerical modules
@@ -619,15 +618,16 @@ class TripleDelaunay(object):
     e_prev2 = 0
     output_index = 1
     self.tstart = time.time()
+
     while (self.t < self.tstop and 
       time.time() - self.tstart < self.cputstop):
 
       self._step()
       if e_prev2 < e_prev > self.e1:
-        self.integration_steps[output_index] = self.state()
+        self.integration_steps[output_index] = prevstate
         output_index += 1
       elif e_prev2 > e_prev < self.e1:
-        self.integration_steps[output_index] = self.state()
+        self.integration_steps[output_index] = prevstate
         output_index += 1
 
       # Check for collisions
@@ -638,9 +638,7 @@ class TripleDelaunay(object):
       t_prev = self.t
       e_prev2 = e_prev
       e_prev = self.e1
-
-    # Print the last step
-    self.integration_steps[output_index] = self.state()
+      prevstate = self.state()
 
     return self.integration_steps[:output_index+1]
 
@@ -664,15 +662,13 @@ class TripleDelaunay(object):
       self._step()
       if e_prev2 < e_prev > self.e1:
         if np.sign(self.th) != sign_prev:
-          self.integration_steps[output_index] = self.state()
+          self.integration_steps[output_index] = prevstate
           output_index += 1
         sign_prev = np.sign(self.th)
       t_prev = self.t
       e_prev2 = e_prev
       e_prev = self.e1
-
-    # Print the last step
-    self.integration_steps[output_index] = self.state()
+      prevstate = self.state()
 
     return self.integration_steps[:output_index+1]
 

@@ -8,11 +8,11 @@ particle limit using vectorial notation.
 '''
 
 # System packages
-import sys
+import json
 import time
 
 # Numerical packages
-from math import pi, sin, cos, acos
+from math import pi, sin, cos, acos, sqrt
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import root, fsolve
@@ -49,32 +49,28 @@ class TripleVectorial(object):
   '''
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, g1=0, m1=1, m3=1,
-    longascnode=180.):
+    Omega=180., r1=0, r2=0):
 
     # First set the vectorial elements
-    self.jhatvec = np.array([
+    inc *= pi / 180
+    Omega *= pi / 180
+    self.jvec = sqrt(1 - e1**2) * np.array([
       sin(inc) * sin(Omega),
       -sin(inc) * cos(Omega),
       cos(inc)])
-    self.jvec = sqrt(1 - e1**2) * self.jhatvec
 
     ehatvec_sol = root(_evec_root, [.5, .5, .5], (self.jhatvec, g1 * 
       pi / 180))
-    self.ehatvec = ehatvec_sol.x
-    self.evec = e1 * self.ehatvec
+    self.evec = e1 * ehatvec_sol.x
 
     self.a1 = a1
     self.a2 = a2
-    self.e1 = e1
     self.e2 = e2
-    self.g1 = g1
-    self.Omega = longascnode
     self.m1 = m1
-    self.m2 = m2
+    self.m2 = 0
     self.m3 = m3
     self.r1 = r1
     self.r2 = r2
-    self.inc = inc
     self.t = 0
 
     # Default integrator parameters
@@ -91,17 +87,6 @@ class TripleVectorial(object):
 
     # Store the initial state
     self.save_as_initial()
-
-    self.update()
-
-    # Integration parameters
-    self.nstep = 0
-    self.tstop = tstop
-    self.cputstop = cputstop
-    self.outfreq = outfreq
-    self.outfilename = outfilename
-    self.integration_algo = integration_algo
-    self.y = list(np.concatenate((self.jvec, self.evec)))
 
   ###
   ### Unit conversions & variable definitions
@@ -197,13 +182,25 @@ class TripleVectorial(object):
   # Angles
 
   @property
+  def _g1(self):
+    '''The argument of periapsis in radians'''
+    crossvec = np.cross(np.array([0, 0, 1]), self.jhatvec)
+    return acos(np.dot(self.ehatvec, crossvec / np.linalg.norm(crossvec)))
+
+  @property
   def g1(self):
     '''g1 in degrees'''
     return self._g1 * 180 / pi
 
-  @g1.setter
-  def g1(self, val):
-    self._g1 = val * pi / 180
+  @property
+  def _Omega(self):
+    '''The longitude of ascending node in radians'''
+    return acos(-self.jhatvec[1] / sin(self._inc))
+
+  @property
+  def Omega(self):
+    '''The longitude of ascending node in degrees'''
+    return self._Omega * 180 / pi
 
   @property
   def th(self):
@@ -223,6 +220,16 @@ class TripleVectorial(object):
   # Other parameters
 
   @property
+  def jhatvec(self):
+    '''The normalized angular momentum vector'''
+    return self.jvec / self.j
+
+  @property
+  def ehatvec(self):
+    '''The normalized eccentricity vector'''
+    return self.evec / self.e1
+
+  @property
   def e1(self):
     '''The eccentricity of the inner binary'''
     return np.linalg.norm(self.evec)
@@ -230,7 +237,7 @@ class TripleVectorial(object):
   @property
   def j(self):
     '''The normalized angular momentum of the inner binary'''
-    return sqrt(1 - self.e1**2)
+    return np.linalg.norm(self.jvec)
 
   @property
   def Phi0(self):
@@ -253,14 +260,14 @@ class TripleVectorial(object):
   def phiq(self):
     '''The quadrupole term of the potential'''
     return (3/4. * (self.jvec[2]**2 / 2. + self.e1**2 - 5/2. * 
-      self.evec[2]**2 - 1/6.)
+      self.evec[2]**2 - 1/6.))
 
   @property
   def phioct(self):
     '''The octupole term of the potential'''
-      return (self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. *
-        self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
-        self.evec[2] * self.jvec[0] * self.jvec[2]))
+    return (self.epsoct * 75/64. * (self.evec[0] * (1/5. - 8/5. *
+      self.e1**2 + 7 * self.evec[2]**2 - self.jvec[2]**2) - 2 *
+      self.evec[2] * self.jvec[0] * self.jvec[2]))
 
   @property
   def Th(self):
@@ -272,61 +279,44 @@ class TripleVectorial(object):
     '''Calculate the libration constant.'''
     return self.e1**2 * (1 - 5./2 * sin(self._inc)**2 * sin(self._g1)**2)
 
-  def _save_initial_params(self):
-    '''Set the variables to their initial values.  Just a clone of
-    reset().'''
+  def save_as_initial(self):
+    '''Set the current parameters as the initial parameters.'''
 
-    # Ordinary variables
-    self.e1_0 = self.e1
-    self.e2_0 = self.e2
-    self.inc_0 = self.inc
-    self.Omega_0 = self.Omega
-    self.g1_0 = self.g1
-    self.j_0 = self.j
-    self.nstep = 0
-
-    # Arrays need to be deep copied
-    self.jhatvec_0 = self.jhatvec[:]
-    self.jvec_0 = self.jvec[:]
-    self.ehatvec_0 = self.ehatvec[:]
-    self.evec_0 = self.evec[:]
+    self.initial_state = {}
+    self.initial_state['a1'] = self.a1
+    self.initial_state['a2'] = self.a2
+    self.initial_state['e1'] = self.e1
+    self.initial_state['e2'] = self.e2
+    self.initial_state['g1'] = self.g1
+    self.initial_state['Omega'] = self.Omega
+    self.initial_state['m1'] = self.m1
+    self.initial_state['m3'] = self.m3
+    self.initial_state['r1'] = self.r1
+    self.initial_state['r2'] = self.r2
+    self.initial_state['inc'] = self.inc
+    self.initial_state['jhatvec'] = self.jhatvec[:]
+    self.initial_state['ehatvec'] = self.ehatvec[:]
+    self.initial_state['jvec'] = self.jvec[:]
+    self.initial_state['evec'] = self.evec[:]
 
   def reset(self):
-    '''Set the variables to their initial values.'''
-
-    # Ordinary variables
-    self.e1 = self.e1_0
-    self.e2 = self.e2_0
-    self.inc = self.inc_0
-    self.Omega = self.Omega_0
-    self.g1 = self.g1_0
-    self.j = self.j_0
-    self.nstep = 0
-    self._t = 0
+    '''Reset the triple to its initial configuration.  This resets the
+    orbital parameters and time, but does not reset the integration
+    options.'''
+    self.t = 0
 
     # Arrays need to be deep copied
-    self.jhatvec = self.jhatvec_0[:]
-    self.jvec = self.jvec_0[:]
-    self.ehatvec = self.ehatvec_0[:]
-    self.evec = self.evec_0[:]
+    self.jvec = self.initial_state['jvec'][:]
+    self.evec = self.initial_state['evec'][:]
 
-    self.update()
-
-  def update(self):
-    '''Update the derived parameters.'''
-    self.calc_Th()
-    self.calc_CKL()
-    self.t = self._t * self.tsec
-    self.e1 = np.linalg.norm(self.evec)
-  
-  def _deriv(self, t, y, epsoct):
+  def _deriv(self, t, y):
     '''The EOMs.  See Eqs. 4 of Katz et al. (2011).'''
 
     # Note that we have the following correspondences:
     # y[0]  y[1]  y[2]  y[3]  y[4]  y[5]
     # j_x   j_y   j_z   e_x   e_y   e_z
 
-    #The total eccentricity:
+    # Unpack the values
     jx, jy, jz, ex, ey, ez = y
     e_sq = ex**2 + ey**2 + ez**2
 
@@ -340,13 +330,19 @@ class TripleVectorial(object):
       -15/4. * ex * ey,
       75/64. * (54/5. * ex * ez - 2 * jx * jz)])
 
-    grad_j_phi = grad_j_phi_q + epsoct * grad_j_phi_oct
-    grad_e_phi = grad_e_phi_q + epsoct * grad_e_phi_oct
+    grad_j_phi = 0
+    grad_e_phi = 0
+    if self.quadrupole:
+      grad_j_phi += grad_j_phi_q
+      grad_e_phi += grad_e_phi_q
+    if self.octupole:
+      grad_j_phi += self.epsoct * grad_j_phi_oct
+      grad_e_phi += self.epsoct * grad_e_phi_oct
 
     djdtau = np.cross(y[:3], grad_j_phi) + np.cross(y[3:], grad_e_phi)
     dedtau = np.cross(y[:3], grad_e_phi) + np.cross(y[3:], grad_j_phi)
 
-    ret = np.concatenate((djdtau, dedtau))
+    ret = np.r_[djdtau, dedtau]
     return list(ret)
 
   def _step(self):
@@ -355,7 +351,6 @@ class TripleVectorial(object):
     self._t = self.solver.t
     self.jvec = self.solver.y[:3]
     self.evec = self.solver.y[3:]
-    self.update()
 
   def integrator_setup(self):
     '''Set up the integrator.'''
@@ -373,95 +368,101 @@ class TripleVectorial(object):
     if self.algo == 'vode':
       self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
 
-  def evolve(self):
+  def evolve(self, tstop):
     '''Integrate the triple in time.'''
-    self.printout()
+
+    self.tstop = tstop
+    n_columns = len(self.state())
+    self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+    self.integration_steps[0] = self.state()
+
     self.tstart = time.time()
     while ((self.t < self.tstop) and 
       (time.time() - self.tstart < self.cputstop)):
 
       self._step()
       if self.nstep % self.outfreq == 0:
-        self.printout()
+        self.integration_steps[self.nstep/self.outfreq] = self.state()
 
-    self.printout()
-    if self.outfilename is not None:
-      self.outfile.close()
+      if self.a1 * (1 - self.e1) < self.r1 + self.r2:
+        self.collision = True
+        break
 
-  def extrema(self):
-    '''Integrate the triple, but only print out on eccentricity extrema.'''
+    laststep = (self.nstep / self.outfreq) + 1
+    self.integration_steps[laststep] = self.state()
+
+    return self.integration_steps[:laststep+1]
+
+  def extrema(self, tstop):
+    '''Integrate the triple, but only save eccentricity extrema.'''
+
+    self.tstop = tstop
+    n_columns = len(self.state())
+    self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
-    while self.t < self.tstop:
+    output_index = 0
+    self.tstart = time.time()
+
+    while (self.t < self.tstop and 
+      time.time() - self.tstart < self.cputstop):
+
       self._step()
-      e = np.linalg.norm(self.evec)
-      if e_prev2 < e_prev > e:
-        outstring = ' '.join(map(str, [t_prev, e_prev]))
-        if self.outfilename is None:
-          print outstring
-        else:
-          self.outfile.write(outstring + '\n')
+      if e_prev2 < e_prev > self.e1:
+        self.integration_steps[output_index] = prevstate
+        output_index += 1
+      elif e_prev2 > e_prev < self.e1:
+        self.integration_steps[output_index] = prevstate
+        output_index += 1
+
+      # Check for collisions
+      if self.a1 * (1 - self.e1) < self.r1 + self.r2:
+        self.collision = True
+        break
+
       t_prev = self.t
       e_prev2 = e_prev
-      e_prev = e
+      e_prev = self.e1
+      prevstate = self.state()
 
-    if self.outfilename is not None:
-      self.outfile.close()
+    return self.integration_steps[:output_index]
 
-  def find_flips(self):
+  def find_flips(self, tstop):
     '''Integrate the triple, but print out only when there is a flip.'''
+
+    self.tstop = tstop
+    n_columns = len(self.state())
+    self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
+
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
-    sign_prev = np.sign(self.jvec[2])
-    while self.t < self.tstop:
+    sign_prev = np.sign(self.th)
+    output_index = 0
+    self.tstart = time.time()
+    while (self.t < self.tstop and 
+      time.time() - self.tstart < self.cputstop):
       self._step()
-      e = np.linalg.norm(self.evec)
-      if e_prev2 < e_prev > e:
-        if np.sign(self.jvec[2]) != sign_prev:
-          outstring = ' '.join(map(str, [t_prev, e_prev]))
-          if self.outfilename is None:
-            print outstring
-          else:
-            self.outfile.write(outstring + '\n')
-        sign_prev = np.sign(self.jvec[2])
+      if e_prev2 < e_prev > self.e1:
+        if np.sign(self.th) != sign_prev:
+          self.integration_steps[output_index] = prevstate
+          output_index += 1
+        sign_prev = np.sign(self.th)
       t_prev = self.t
       e_prev2 = e_prev
-      e_prev = e
-    self.outfile.close()
+      e_prev = self.e1
+      prevstate = self.state()
 
-  def printout(self):
-    '''Print out the state of the system in the format:
-
-    time  jx  jy  jz  ex  ey  ez
-
-    '''
-
-    outstring = ' '.join(map(str, np.concatenate((np.array([self.t]), 
-      self.jvec, self.evec))))
-    if self.outfilename is None:
-      print outstring
-    else:
-      self.outfile.write(outstring + '\n')
-
-  def flip_times(self, nflips=3):
-    '''Find the times that the inner binary flips.'''
-    sign = np.sign(self.jvec[2])
-    sign_prev = sign
-    flip_count = 0
-
-    # Integrate along...
-    while flip_count < nflips:
-      self._step()
-      sign = np.sign(self.jvec[2])
-      if sign != sign_prev:
-        flip_count += 1
-        self.printout()
-      sign_prev = sign
+    return self.integration_steps[:output_index]
 
   def flip_period(self, nflips=3):
     '''Return the period of flips.'''
+
     sign = np.sign(self.jvec[2])
     sign_prev = sign
     flip_count = 0
@@ -479,6 +480,39 @@ class TripleVectorial(object):
       sign_prev = sign
 
     return np.mean(periods)
+
+  def state(self):
+    '''Return a tuple with the dynamical state of the system.
+
+    Returns:
+      (t, a1, e1, g1, a2, e2, Omega, inc)
+    '''
+    return (self.t, self.a1, self.e1, self.g1, self.a2, self.e2, 
+      self.Omega, self.inc)
+  
+  def __repr__(self):
+    '''Print out the initial values in JSON format.'''
+
+    # Get the initial state
+    json_data = self.initial_state
+    for key in json_data:
+      if type(json_data[key]) == np.ndarray:
+        json_data[key] = list(json_data[key])
+
+    # Add some other properties
+    json_data['epsoct'] = self.epsoct
+    json_data['tstop'] = self.tstop
+    json_data['cputstop'] = self.cputstop
+    json_data['outfreq'] = self.outfreq
+    json_data['atol'] = self.atol
+    json_data['rtol'] = self.rtol
+    json_data['quadrupole'] = self.quadrupole
+    json_data['octupole'] = self.octupole
+    json_data['algo'] = self.algo
+    json_data['maxoutput'] = self.maxoutput
+    json_data['collision'] = self.collision
+
+    return json.dumps(json_data, sort_keys=True, indent=2)
 
 def _evec_root(x, j, g1):
   '''The set of equations that determine evec.'''
