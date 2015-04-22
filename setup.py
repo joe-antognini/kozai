@@ -36,7 +36,7 @@ setup(name='kozai',
         'License :: OSI Approved :: MIT License',
         'Topic :: Scientific/Engineering :: Astronomy',
         'Topic :: Scientific/Engineering :: Physics'],
-      keywords='kozai lidov triple dynamics orbit star'
+      keywords='kozai lidov triple dynamics orbit star',
       url='https://github.com/joe-antognini/kozai',
       author='Joseph O\'Brien Antognini',
       author_email='joe.antognini@gmail.com',

@@ -4,7 +4,8 @@
 Evolve a triple from the command line.
 '''
 
-import kozai
+import sys
+from kozai.delaunay import TripleDelaunay
 
 def process_command_line(argv):
   '''Process the command line.'''

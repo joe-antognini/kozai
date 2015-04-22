@@ -6,6 +6,9 @@ kozai-ekm
 Evolve TripleOctupole from the command line.
 '''
 
+import sys
+from triple.ekm import TripleOctupole
+
 def process_command_line(argv):
   '''Process the command line.'''
   

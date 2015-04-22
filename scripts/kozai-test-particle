@@ -6,7 +6,8 @@ kozai-test-particle
 Evolve a triple from the command line.
 '''
 
-import kozai
+import sys
+from kozai.vectorial import TripleVectorial
 
 def process_command_line(argv):
   '''Process the command line.'''
