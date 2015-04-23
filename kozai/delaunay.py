@@ -610,12 +610,11 @@ class TripleDelaunay(object):
     n_columns = len(self.state())
     self.integrator_setup()
     self.integration_steps = np.zeros((self.maxoutput, n_columns))
-    self.integration_steps[0] = self.state()
 
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
-    output_index = 1
+    output_index = 0
     self.tstart = time.time()
 
     while (self.t < self.tstop and 
@@ -639,7 +638,7 @@ class TripleDelaunay(object):
       e_prev = self.e1
       prevstate = self.state()
 
-    return self.integration_steps[:output_index+1]
+    return self.integration_steps[:output_index]
 
   def find_flips(self, tstop):
     '''Integrate the triple, but print out only when there is a flip.'''
@@ -648,13 +647,12 @@ class TripleDelaunay(object):
     n_columns = len(self.state())
     self.integrator_setup()
     self.integration_steps = np.zeros((self.maxoutput, n_columns))
-    self.integration_steps[0] = self.state()
 
     t_prev = 0
     e_prev = 0
     e_prev2 = 0
     sign_prev = np.sign(self.th)
-    output_index = 1
+    output_index = 0
     self.tstart = time.time()
     while (self.t < self.tstop and 
       time.time() - self.tstart < self.cputstop):
@@ -669,7 +667,7 @@ class TripleDelaunay(object):
       e_prev = self.e1
       prevstate = self.state()
 
-    return self.integration_steps[:output_index+1]
+    return self.integration_steps[:output_index]
 
   def state(self):
     '''Return a tuple with the dynamical state of the system.
