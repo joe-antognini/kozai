@@ -19,6 +19,20 @@ package uses VODE as its integration algorithm, but the algorithm may be
 changed to any of the other integration algorithms supported by the SciPy
 ODE package.
 
+## Installation
+
+The Kozai package is available on PyPI and can be installed with pip:
+
+```
+pip install kozai
+```
+
+Or, if you do not have the permissions to run the above:
+
+```
+pip install --user kozai
+```
+
 ## Dependencies
 
 -  NumPy
