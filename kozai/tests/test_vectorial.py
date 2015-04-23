@@ -101,3 +101,8 @@ def test_reset():
   ev2 = tv.evolve(tstop)
   assert_allclose(ev1[-1], ev2[-1], rtol=1e-2, atol=1e-2)
 
+def test_flip_period():
+  '''Test the flip_period method.'''
+  tv = TripleVectorial(inc=80, e1=.1, m1=1)
+  p = tv.flip_period(nflips=3)
+  assert_allclose(p, 98589.004419462)

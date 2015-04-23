@@ -27,7 +27,7 @@ def readme():
     return f.read()
 
 setup(name='kozai',
-      version='0.1.2',
+      version='0.1.3',
       description='Evolve hierarchical triples',
       long_description=readme(),
       classifiers=[

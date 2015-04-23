@@ -460,8 +460,13 @@ class TripleVectorial(object):
 
     return self.integration_steps[:output_index]
 
-  def flip_period(self, nflips=3):
+  def flip_period(self, nflips=3, tstop=1e10):
     '''Return the period of flips.'''
+
+    self.tstop = tstop
+    n_columns = len(self.state())
+    self.integrator_setup()
+    self.integration_steps = np.zeros((self.maxoutput, n_columns))
 
     sign = np.sign(self.jvec[2])
     sign_prev = sign
