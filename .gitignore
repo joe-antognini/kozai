@@ -4,3 +4,4 @@
 /dist/
 /*.egg-info
 /*.egg
+/docs/.ipynb_checkpoints/
