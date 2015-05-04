@@ -21,9 +21,23 @@ def test_set_octupole():
   tv = TripleVectorial()
   tv.octupole = False
 
+def test_inc70():
+  '''Make a triple with inclination of 70 degrees.'''
+  tv = TripleVectorial(e1=.05, inc=70)
+
 ###
 ### Parameter calculation tests
 ###
+
+def test_Th():
+  '''Test the calculation of Kozai's integral.'''
+  tv = TripleVectorial(e1=.05, inc=70)
+  assert_allclose(tv.Th, .11668533399441)
+
+def test_epsoct():
+  '''Test the epsoct calculation.'''
+  tv = TripleVectorial(a1=1, a2=20, e2=.3)
+  assert_allclose(tv.epsoct, .01648351648)
 
 def test_Phi0():
   '''Test calculation of Phi0.  The calculation is done in units of Solar
@@ -40,6 +54,10 @@ def test_CKL():
   '''Test the CKL calculation.'''
   tv = TripleVectorial(e1=.1, inc=80, g1=45)
   assert_allclose(tv.CKL, -.00212307888)
+
+def test_Hhatquad():
+  tv = TripleVectorial(e1=.1, inc=80, g1=45)
+  assert_allclose(tv.Hhatquad, 1.846364030293)
 
 ###
 ### Representation tests

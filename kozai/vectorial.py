@@ -12,7 +12,7 @@ import json
 import time
 
 # Numerical packages
-from math import pi, sin, cos, acos, sqrt
+from math import acos, asin, cos, pi, sin, sqrt
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import root, fsolve
@@ -195,7 +195,10 @@ class TripleVectorial(object):
   @property
   def _Omega(self):
     '''The longitude of ascending node in radians'''
-    return acos(-self.jhatvec[1] / sin(self._inc))
+    try:
+      return acos(-self.jhatvec[1] / sin(self._inc))
+    except ValueError:
+      return asin(self.jhatvec[0] / sin(self._inc))
 
   @property
   def Omega(self):

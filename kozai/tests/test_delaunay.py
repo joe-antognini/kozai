@@ -32,10 +32,28 @@ def test_set_after_creation():
   t.m2 = 1e-3
   assert_allclose(t.inc, 80)
 
+###
+### Parameter calculation tests
+###
+
+def test_Th():
+  '''Test the calculation of Kozai's integral.'''
+  t = TripleDelaunay(e1=.05, inc=70)
+  assert_allclose(t.Th, .11668533399441)
+
 def test_epsoct():
   '''Test the epsoct calculation.'''
   t = TripleDelaunay(a1=1, a2=20, e2=.3)
   assert_allclose(t.epsoct, .01648351648)
+
+def test_CKL():
+  '''Test the CKL calculation.'''
+  t = TripleDelaunay(e1=.1, inc=80, g1=45)
+  assert_allclose(t.CKL, -.00212307888)
+
+def test_Hhatquad():
+  t = TripleDelaunay(e1=.1, inc=80, g1=45)
+  assert_allclose(t.Hhatquad, 1.846364030293)
 
 ###
 ### Representation tests

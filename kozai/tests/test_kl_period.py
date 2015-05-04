@@ -27,11 +27,17 @@ def test_islibrating():
   tv = TripleVectorial(e1=.1, inc=80, g1=0)
   assert is_librating(tv) == False
 
-def test_kl_period():
+def test_kl_period_vectorial():
   '''Test the KL period semi-analytic calculation.'''
   tv = TripleVectorial(a1=1, a2=20, e1=.1, e2=.3, m1=1, m3=1,
         g1=0, Omega=np.pi)
   assert_allclose(kl_period(tv), 4195.8240184679735, atol=1e-5, rtol=1e-5)
+
+def test_kl_period_delaunay():
+  '''Test the KL period semi-analytic calculation.'''
+  t = TripleDelaunay(a1=1, a2=20, e1=.1, e2=.3, m1=1, m2=1, m3=1,
+        g1=0, g2=0, inc=70)
+  assert_allclose(kl_period(t), 4393.54571456, atol=1e-5, rtol=1e-5)
 
 def test_numerical_kl_period_vectorial():
   '''See if the numerical calculation of the KL period by explicitly

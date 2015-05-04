@@ -300,6 +300,22 @@ class TripleDelaunay(object):
     return self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
 
   @property
+  def Th(self):
+    '''Calculate Kozai's integral.'''
+    return (1 - self.e1**2) * cos(self._inc)**2
+
+  @property
+  def CKL(self):
+    '''Calculate the libration constant.'''
+    return self.e1**2 * (1 - 5./2 * sin(self._inc)**2 * sin(self._g1)**2)
+
+  @property
+  def Hhatquad(self):
+    '''The normalized quadrupole term of the Hamiltonian'''
+    return ((2 + 3 * self.e1**2) * (1 - 3 * self.th**2) - 15 *
+      self.e1**2 * (1 - self.th**2) * cos(2 * self._g1))
+
+  @property
   def outfreq(self):
     return self._outfreq
 
