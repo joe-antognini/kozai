@@ -45,6 +45,7 @@ also be accessed online [here.][1]
 
 ## References
 
+- [Antognini, 2015, ArXiv 1504.05957][5]
 - [Blaes, O., Lee, M.H., & Socrates, A., 2002, ApJ, 578, 775][2]
 - [Katz, B., Dong, S., & Malhotra, R., 2011, PhRvL, 107, 181101][3]
 - [Naoz, S., Farr, W.M., Lithwick, Y., Rasio, F.A., & Teyssandier, J., 2013b,
@@ -54,3 +55,4 @@ also be accessed online [here.][1]
 [2]: http://adsabs.harvard.edu/abs/2002ApJ...578..775B
 [3]: http://adsabs.harvard.edu/abs/2011PhRvL.107r1101K
 [4]: http://adsabs.harvard.edu/abs/2013MNRAS.431.2155N
+[5]: http://arxiv.org/abs/1504.05957
