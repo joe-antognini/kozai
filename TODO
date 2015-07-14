@@ -1,7 +1,7 @@
 - Separate out command line functionality
 - Remove long init declaration
 - Add params file support
-- Store results rather than write (write to tmp if tool large)
+- Store results rather than write (write to tmp if too large)
 - IntegrationTimeout exception class
 - Update tests
 - Make an Ipython notebook tutorial
