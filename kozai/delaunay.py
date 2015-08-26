@@ -606,7 +606,7 @@ class TripleDelaunay(object):
       if self.nstep % self.outfreq == 0:
         self.integration_steps[self.nstep/self.outfreq] = self.state()
 
-      if self.a1 * (1 - self.e1) < self.r1 + self.r2:
+      if self._a1 * (1 - self.e1) < self._r1 + self._r2:
         self.collision = True
         break
 

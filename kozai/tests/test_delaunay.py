@@ -122,4 +122,14 @@ def test_reset():
   ev2 = t.evolve(tstop)
   assert_allclose(ev1[-1], ev2[-1], rtol=1e-2, atol=1e-2)
 
+def test_collision():
+  '''Make sure that collisions happen (or not).'''
+  t = TripleDelaunay(r1=1e-3, r2=1e-3)
+  ev = t.evolve(1e4)
+  assert not t.collision
+
+  t = TripleDelaunay(r1=30, r2=30)
+  ev = t.evolve(1e4)
+  assert t.collision
+
 # todo test conservation of constants
