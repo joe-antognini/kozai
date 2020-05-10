@@ -28,9 +28,10 @@ setup(
     packages=['kozai'],
     python_requires='>=3.6',
     scripts=[
-      'scripts/kozai',
-      'scripts/kozai-test-particle',
-      'scripts/kozai-ekm'],
+        'scripts/kozai',
+        'scripts/kozai-test-particle',
+        'scripts/kozai-ekm',
+    ],
     tests_require=['pytest>=5.4.2'],
     url='https://github.com/joe-antognini/kozai',
     version='1.0.0',
