@@ -38,10 +38,19 @@ pip install --user kozai
 An IPython notebook tutorial is in the docs folder.  The tutorial can be
 also be accessed online [here.][1]
 
-## Dependencies
+Note that you will need to separately install `matplotlib` to run the tutorial
+if you don't have it installed already.  `matplotlib` will be installed if you
+install the `requirements-dev.txt` file described below.
 
--  NumPy
--  SciPy
+## Development
+
+If you want to do any development on the `kozai` package it can help to install
+the dependencies in the `requirements-dev.txt` file.  If you are in the root
+directory of the `kozai` repository you can do this as follows:
+
+```sh
+pip install -r requirements-dev.txt
+```
 
 ## References
 

@@ -1,2 +1,4 @@
 black>=19.10b0
 flake8>=3.7.9
+jupyterlab>=2.1.2
+matplotlib>=3.2.1
