@@ -1,53 +1,39 @@
-#! /usr/bin/env python
-
-import sys
+"""Setup script for `kozai`."""
 
 from setuptools import setup
-from setuptools.command.test import test as TestCommand
 
-class PyTest(TestCommand):
-  user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
-
-  def initialize_options(self):
-    TestCommand.initialize_options(self)
-    self.pytest_args = []
-
-  def finalize_options(self):
-    TestCommand.finalize_options(self)
-    self.test_args = []
-    self.test_suite = True
-
-  def run_tests(self):
-    import pytest
-    errno = pytest.main(self.pytest_args)
-    sys.exit(errno)
 
 def readme():
-  with open('README.md') as f:
-    return f.read()
+    with open('README.md') as f:
+        return f.read()
 
-setup(name='kozai',
-      version='0.2.2',
-      description='Evolve hierarchical triples',
-      long_description=readme(),
-      classifiers=[
+
+setup(
+    author='Joseph O\'Brien Antognini',
+    author_email='joe.antognini@gmail.com',
+    classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 2.7',
         'Topic :: Scientific/Engineering :: Astronomy',
-        'Topic :: Scientific/Engineering :: Physics'],
-      keywords='kozai lidov triple dynamics orbit star',
-      url='https://github.com/joe-antognini/kozai',
-      author='Joseph O\'Brien Antognini',
-      author_email='joe.antognini@gmail.com',
-      license='MIT',
-      packages=['kozai'],
-      scripts=[
-        'scripts/kozai', 
-        'scripts/kozai-test-particle', 
-        'scripts/kozai-ekm'],
-      install_requires=['numpy', 'scipy'],
-      tests_require=['pytest'],
-      cmdclass = {'test': PyTest},
-      zip_safe=False)
+        'Topic :: Scientific/Engineering :: Physics',
+    ],
+    description='Evolve hierarchical triples.',
+    install_requires=['numpy>=1.18.4', 'scipy>=1.4.1'],
+    keywords='kozai lidov triple dynamics orbit star',
+    license='MIT',
+    long_description=readme(),
+    name='kozai',
+    packages=['kozai'],
+    python_requires='>=3.6',
+    scripts=[
+        'scripts/kozai',
+        'scripts/kozai-test-particle',
+        'scripts/kozai-ekm',
+    ],
+    tests_require=['pytest>=5.4.2'],
+    url='https://github.com/joe-antognini/kozai',
+    version='1.0.0',
+    zip_safe=False,
+)
