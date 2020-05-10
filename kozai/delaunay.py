@@ -5,7 +5,7 @@ import time
 from math import sqrt, cos, sin, pi, acos
 
 import numpy as np
-from scipy.integrate import ode, quad
+from scipy.integrate import ode
 
 from _kozai_constants import au
 from _kozai_constants import c
@@ -18,8 +18,8 @@ from _kozai_constants import yr2s
 class TripleDelaunay:
     """Evolve a hierarchical triple using the Delaunay orbital elements.
 
-    This class handles triples in which all objects are massive.    To integrate in
-    the test particle approximation use the Triple_vector class.
+    This class handles triples in which all objects are massive.  To integrate
+    in the test particle approximation use the Triple_vector class.
 
     Args:
         a1: Semi-major axis of inner binary in AU.
@@ -101,8 +101,8 @@ class TripleDelaunay:
     # Unit conversions & variable definitions.
     #
     # Properties beginning with an underscore are stored in radians or SI
-    # units.    Most calculations are much easier when done in SI, but it is
-    # inconvenient for the user to deal with SI units.    Thus, the properties
+    # units.  Most calculations are much easier when done in SI, but it is
+    # inconvenient for the user to deal with SI units.  Thus, the properties
     # can be set using AU, M_sun, degrees, yr, or whatever other units are
     # appropriate.
 
@@ -241,17 +241,23 @@ class TripleDelaunay:
 
     @property
     def cosphi(self):
-        """Angle between the arguments of periapsis.    See Eq. 23 of Blaes et al.
-        (2002)."""
+        """Calculate the angle between the arguments of periapsis.
+
+        See Eq. 23 of Blaes et al.  (2002).
+
+        """
         return -cos(self._g1) * cos(self._g2) - self.th * sin(self._g1) * sin(
             self._g2
         )
 
     @property
     def th(self):
-        """Calculate the cosine of the inclination.    See Eq. 22 of Blaes et al.
-        (2002)."""
-        return (self._H ** 2 - self._G1 ** 2 - self._G2 ** 2) / (
+        """Calculate the cosine of the inclination.
+
+        See Eq. 22 of Blaes et al. (2002).
+
+        """
+        return (self._H**2 - self._G1**2 - self._G2**2) / (
             2 * self._G1 * self._G2
         )
 
@@ -262,38 +268,42 @@ class TripleDelaunay:
 
     @property
     def inc(self):
-        """The mutual inclination."""
+        """Calculate the mutual inclination."""
         return self._inc * 180 / pi
 
     @inc.setter
     def inc(self, val):
-        """Set the inclination.    This really sets _H and inc is recalculated."""
+        """Set the inclination.
+
+        This really sets _H and inc is recalculated.
+
+        """
         self._H = sqrt(
-            self._G1 ** 2
-            + self._G2 ** 2
+            self._G1**2
+            + self._G2**2
             + 2 * self._G1 * self._G2 * cos(val * pi / 180)
         )
 
     # Angular momenta
     @property
     def _G1(self):
-        """Calculate G1.    See Eq. 6 of Blaes et al. (2002)."""
+        """Calculate G1.  See Eq. 6 of Blaes et al. (2002)."""
         return (
             self._m1
             * self._m2
-            * sqrt(G * self._a1 * (1 - self.e1 ** 2) / (self._m1 + self._m2))
+            * sqrt(G * self._a1 * (1 - self.e1**2) / (self._m1 + self._m2))
         )
 
     @property
     def _G2(self):
-        """Calculate G2.    See Eq. 7 of Blaes et al. (2002)."""
+        """Calculate G2.  See Eq. 7 of Blaes et al. (2002)."""
         return (
             (self._m1 + self._m2)
             * self._m3
             * sqrt(
                 G
                 * self._a2
-                * (1 - self.e2 ** 2)
+                * (1 - self.e2**2)
                 / (self._m1 + self._m2 + self._m3)
             )
         )
@@ -301,7 +311,7 @@ class TripleDelaunay:
     # Energies
     @property
     def C2(self):
-        """Calculate C2.    See Eq. 18 of Blaes et al., (2002)."""
+        """Calculate C2.  See Eq. 18 of Blaes et al., (2002)."""
         return (
             G
             * self._m1
@@ -311,14 +321,14 @@ class TripleDelaunay:
                 16
                 * (self._m1 + self._m2)
                 * self._a2
-                * (1 - self.e2 ** 2) ** (3.0 / 2)
+                * (1 - self.e2**2)**(3.0 / 2)
             )
-            * (self._a1 / self._a2) ** 2
+            * (self._a1 / self._a2)**2
         )
 
     @property
     def C3(self):
-        """Calculate C3.    See Eq. 19 of Blaes et al., (2002)."""
+        """Calculate C3.  See Eq. 19 of Blaes et al., (2002)."""
         return (
             15
             * G
@@ -328,36 +338,36 @@ class TripleDelaunay:
             * (self._m1 - self._m2)
             / (
                 64
-                * (self._m1 + self._m2) ** 2
+                * (self._m1 + self._m2)**2
                 * self._a2
-                * (1 - self.e2 ** 2) ** (5.0 / 2)
+                * (1 - self.e2**2)**(5.0 / 2)
             )
-            * (self._a1 / self._a2) ** 3
+            * (self._a1 / self._a2)**3
         )
 
     # Other parameters
     @property
     def epsoct(self):
-        return self.e2 / (1 - self.e2 ** 2) * (self.a1 / self.a2)
+        return self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
 
     @property
     def Th(self):
         """Calculate Kozai's integral."""
-        return (1 - self.e1 ** 2) * cos(self._inc) ** 2
+        return (1 - self.e1**2) * cos(self._inc)**2
 
     @property
     def CKL(self):
         """Calculate the libration constant."""
-        return self.e1 ** 2 * (
-            1 - 5.0 / 2 * sin(self._inc) ** 2 * sin(self._g1) ** 2
+        return self.e1**2 * (
+            1 - 5.0 / 2 * sin(self._inc)**2 * sin(self._g1)**2
         )
 
     @property
     def Hhatquad(self):
         """The normalized quadrupole term of the Hamiltonian"""
-        return (2 + 3 * self.e1 ** 2) * (
-            1 - 3 * self.th ** 2
-        ) - 15 * self.e1 ** 2 * (1 - self.th ** 2) * cos(2 * self._g1)
+        return (2 + 3 * self.e1**2) * (
+            1 - 3 * self.th**2
+        ) - 15 * self.e1**2 * (1 - self.th**2) * cos(2 * self._g1)
 
     @property
     def outfreq(self):
@@ -386,7 +396,7 @@ class TripleDelaunay:
 
     # Integration routines
     def _deriv(self, t, y):
-        """The EOMs.    See Eqs. 11 -- 17 of Blaes et al. (2002)."""
+        """The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002)."""
 
         # Unpack the values.
         a1, e1, g1, e2, g2, H = y
@@ -404,217 +414,284 @@ class TripleDelaunay:
 
         # TODO
         # Are these necessary now that we are calculating them dynamically?
-        G1 = m1 * m2 * sqrt(G * a1 * (1 - e1 ** 2) / (m1 + m2))
-        G2 = (m1 + m2) * m3 * sqrt(G * a2 * (1 - e2 ** 2) / (m1 + m2 + m3))
+        G1 = m1 * m2 * sqrt(G * a1 * (1 - e1**2) / (m1 + m2))
+        G2 = (m1 + m2) * m3 * sqrt(G * a2 * (1 - e2**2) / (m1 + m2 + m3))
 
+        # Python's `black` is very bad for long equations, so we temporarily
+        # disable it here.
+
+        # fmt: off
         C2 = (
-            G
-            * m1
-            * m2
-            * m3
-            / (16 * (m1 + m2) * a2 * (1 - e2 ** 2) ** (3.0 / 2))
-            * (a1 / a2) ** 2
+            G * m1 * m2 * m3 /
+            (16 * (m1 + m2) * a2 * (1 - e2**2)**(3.0 / 2)) * (a1 / a2)**2
         )
         C3 = (
-            15
-            * G
-            * m1
-            * m2
-            * m3
-            * (m2 - m1)
-            / (64 * (m1 + m2) ** 2 * a2 * (1 - e2 ** 2) ** (5.0 / 2))
-            * (a1 / a2) ** 3
+            15 * G * m1 * m2 * m3 * (m2 - m1) /
+            (64 * (m1 + m2)**2 * a2 * (1 - e2**2)**(5.0 / 2)) * (a1 / a2)**3
         )
 
-        th = (H ** 2 - G1 ** 2 - G2 ** 2) / (2 * G1 * G2)
+        th = (H**2 - G1**2 - G2**2) / (2 * G1 * G2)
         cosphi = cosg1 * cosg2 - th * sing1 * sing2
-        B = 2 + 5 * e1 ** 2 - 7 * e1 ** 2 * cos(2 * g1)
-        A = 4 + 3 * e1 ** 2 - 5 / 2.0 * (1 - th ** 2) * B
+        B = 2 + 5 * e1**2 - 7 * e1**2 * cos(2 * g1)
+        A = 4 + 3 * e1**2 - 5 / 2.0 * (1 - th**2) * B
 
         # Eq. 11 of Blaes et al. (2002).
         da1dt = 0.0
         if self.gr:
             da1dt += -(
-                64
-                * G ** 3
-                * m1
-                * m2
-                * (m1 + m2)
-                / (5 * c ** 5 * a1 ** 3 * sqrt((1 - e1 ** 2) ** 7))
-                * (1 + 73 / 24.0 * e1 ** 2 + 37 / 96.0 * e1 ** 4)
+                64 * G**3 * m1 * m2 * (m1 + m2) /
+                (5 * c**5 * a1**3 * sqrt((1 - e1**2)**7)) *
+                (1 + 73 / 24.0 * e1**2 + 37 / 96.0 * e1**4)
             )
-
-        # Python's `black` is very bad for long equations, so we temporarily disable
-        # it here.
-        # fmt: off
 
         # Eq. 12 of Blaes et al. (2002).
         dg1dt = 0.
         if self.quadrupole:
-            dg1dt += (6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
-                e1**2 - th**2)) + th / G2 * (2 + e1**2 * (3 - 5 * cos(2 * g1)))))
+            dg1dt += (
+                6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
+                e1**2 - th**2)) + th /
+                G2 * (2 + e1**2 * (3 - 5 * cos(2 * g1))))
+            )
         if self.octupole:
-            dg1dt += (C3 * e2 * e1 * (1 / G2 + th / G1) * (sing1 * sing2 * 
-                (A + 10 * (3 * th**2 - 1) * (1 - e1**2)) - 5 * th * B * cosphi) - C3
-                * e2 * (1 - e1**2) / (e1 * G1) * (10 * th * (1 - th**2) * (1 - 3 *
-                e1**2) * sing1 * sing2 + cosphi * (3 * A - 10 * th**2 + 2)))
+            dg1dt += (
+                C3 * e2 * e1 * (1 / G2 + th / G1) *
+                (sing1 * sing2 * (A + 10 * (3 * th**2 - 1) * (1 - e1**2)) -
+                5 * th * B * cosphi) -
+                C3 * e2 * (1 - e1**2) / (e1 * G1) *
+                (10 * th * (1 - th**2) * (1 - 3 * e1**2) * sing1 * sing2 +
+                cosphi * (3 * A - 10 * th**2 + 2))
+            )
         if self.gr:
-            dg1dt += ((3 / (c**2 * a1 * (1 - e1**2)) * 
+            dg1dt += ((3 / (c**2 * a1 * (1 - e1**2)) *
                 sqrt((G * (m1 + m2) / a1)**3)))
         if self.hexadecapole:
-            dg1dt += (1 / (4096. * a2**5 * sqrt(1 - e1**2) * (m1 + m2)**5) * 45 *
-                a1**3 * sqrt(a1 * G * (m1 + m2)) * (-1 / ((e2**2 - 1)**4 * sqrt(a2 *
-                G * (m1 + m2 + m3))) * (m1**2 - m1 * m2 + m2**2) * (sqrt(1 - e2**2) *
-                m2**2 * m3 * sqrt(a2 * G * (m1 + m2 + m3)) * th + m1**2 * (sqrt( 1 -
-                e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) + sqrt(1 - e2**2) * m3 *
-                sqrt(a2 * G * (m1 + m2 + m3)) * th) + m1 * m2 * (sqrt(1 - e1**2) * m2
-                * sqrt(a1 * G * (m1 + m2)) + sqrt(1 - e1**2) * sqrt(a1 * G * (m1
-                + m2)) * m3 + 2 * sqrt(1 - e2**2) * m3 * sqrt(a2 * G * (m1 + m2 +
-                m3)) * th)) * (96 * th + 480 * e1**2 * th + 180 * e1**4 * th + 144 *
-                e2**2 * th + 720 * e1**2 * e2**2 * th + 270 * e1**4 * e2**2 * th -
-                224 * th**3 - 1120 * e1**2 * th**3 - 420 * e1**4 * th**3 - 336 *
-                e2**2 * th**3 - 1680 * e1**2 * e2**2 * th**3 - 630 * e1**4 * e2**2 *
-                th**3 + 56 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) * th * (7 * th**2
-                - 4) * cos(2 * g1) - 294 * e1**4 * (2 + 3 * e2**2) * th * (th**2 - 1)
-                * cos(4 * g1) - 147 * e1**4 * e2**2 * cos(4 * g1 - 2 * g2) + 441 *
-                e1**4 * e2**2 * th**2 * cos(4 * g1 - 2 * g2) + 294 * e1**4 * e2**2 *
-                th**3 * cos(4 * g1 - 2 * g2) + 140 * e1**2 * e2**2 * cos(2 * (g1 -
-                g2)) + 70 * e1**4 * e2**2 * cos(2 * (g1 - g2)) + 336 * e1**2 * e2**3
-                * th * cos(2 * (g1 - g2)) + 168 * e1**4 * e2**2 * th * cos(2 * (g1 -
-                g2)) - 588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 - g2)) - 294 * e1**4
-                * e2**2 * th**2 * cos(2 * (g1 - g2)) - 784 * e1**2 * e2**2 * th**3 *
-                cos(2 * (g1 - g2)) - 392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 - g2))
-                - 128 * e2**2 * th * cos(2 * g2) - 640 * e1**2 * e2**2 * th * cos(2 *
-                g2) - 240 * e1**4 * e2**2 * th * cos(2 * g2) + 224 * e2**2 * th**3 *
-                cos(2 * g2) + 1120 * e1**2 * e2**2 * th**3 * cos(2 * g2) + 420 *
-                e1**4 * e2**2 * th**3 * cos(2 * g2) - 140 * e1**2 * e2**2 * cos(2 *
-                (g1 + g2)) - 70 * e1**4 * e2**2 * cos(2 * (g1 + g2)) + 336 * e1**2 *
-                e2**2 * th * cos(2 * (g1 + g2)) + 168 * e1**4 * e2**2 * th * cos(2 *
-                (g1 + g2)) + 588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 + g2)) + 294 *
-                e1**4 * e2**2 * th**2 * cos(2 * (g1 + g2)) - 784 * e1**2 * e2**2 *
-                th**3 * cos(2 * (g1 + g2)) - 392 * e1**4 * e2**2 * th**3 * cos(2 *
-                (g1 + g2)) + 147 * e1**4 * e2**2 * cos(2 * (2 * g1 + g2)) - 441 *
-                e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) + 294 * e1**4 * e2**2
-                * th**3 * cos(2 * (2 * g1 + g2))) + 1 / (e1 * sqrt((1 - e2**2)**7)) *
-                2 * (1 - e1**2) * (m1 + m2) * (m1**3 + m2**3) * m3 * (e1 * (4 + 3 *
-                e1**2) * (2 + 3 * e2**2) * (3 - 30 * th**2 + 35 * th**4) - 28 * (e1
-                + e1**3) * (2 + 3 * e2**2) * (1 - 8 * th**2 + 7 * th**4) * cos(2 *
-                g1) + 147 * e1**3 * (2 + 3 * e2**2) * (th**2 - 1)**2 * cos(4 * g1) -
-                10 * e1 * (4 + 3 * e1**2) * e2**2 * (1 - 8 * th**2 + 7 * th**4) *
-                cos(2 * g2) + 28 * (e1 + e1**3) * e2**2 * ((1 + th)**2 * (1 - 7 * th
-                + 7 * th**2) * cos(2 * (g1 - g2)) + (th - 1)**2 * (1 + 7 * th + 7 *
-                th**2) * cos(2 * (g1 + g2))) - 147 * e1**3 * e2**2 * (th**2 - 1) *
-                ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (th - 1)**2 * cos(2 * (2 * g1 +
-                g2))))))
+            dg1dt += (
+                1 / (4096. * a2**5 * sqrt(1 - e1**2) * (m1 + m2)**5) * 45 *
+                a1**3 * sqrt(a1 * G * (m1 + m2)) * (-1 / ((e2**2 - 1)**4 *
+                sqrt(a2 * G * (m1 + m2 + m3))) * (m1**2 - m1 * m2 + m2**2) *
+                (sqrt(1 - e2**2) * m2**2 * m3 *
+                sqrt(a2 * G * (m1 + m2 + m3)) * th + m1**2 *
+                (sqrt(1 - e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) +
+                sqrt(1 - e2**2) * m3 * sqrt(a2 * G * (m1 + m2 + m3)) * th) +
+                m1 * m2 * (sqrt(1 - e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) +
+                sqrt(1 - e1**2) * sqrt(a1 * G * (m1 + m2)) * m3 +
+                2 * sqrt(1 - e2**2) * m3 *
+                sqrt(a2 * G * (m1 + m2 + m3)) * th)) *
+                (96 * th + 480 * e1**2 * th + 180 * e1**4 * th +
+                144 * e2**2 * th + 720 * e1**2 * e2**2 * th +
+                270 * e1**4 * e2**2 * th - 224 * th**3 - 1120 * e1**2 * th**3 -
+                420 * e1**4 * th**3 - 336 * e2**2 * th**3 -
+                1680 * e1**2 * e2**2 * th**3 - 630 * e1**4 * e2**2 * th**3 +
+                56 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) * th *
+                (7 * th**2 - 4) * cos(2 * g1) -
+                294 * e1**4 * (2 + 3 * e2**2) * th * (th**2 - 1) *
+                cos(4 * g1) -
+                147 * e1**4 * e2**2 * cos(4 * g1 - 2 * g2) +
+                441 * e1**4 * e2**2 * th**2 * cos(4 * g1 - 2 * g2) +
+                294 * e1**4 * e2**2 * th**3 * cos(4 * g1 - 2 * g2) +
+                140 * e1**2 * e2**2 * cos(2 * (g1 - g2)) +
+                70 * e1**4 * e2**2 * cos(2 * (g1 - g2)) +
+                336 * e1**2 * e2**3 * th * cos(2 * (g1 - g2)) +
+                168 * e1**4 * e2**2 * th * cos(2 * (g1 - g2)) -
+                588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 - g2)) -
+                294 * e1**4 * e2**2 * th**2 * cos(2 * (g1 - g2)) -
+                784 * e1**2 * e2**2 * th**3 * cos(2 * (g1 - g2)) -
+                392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 - g2)) -
+                128 * e2**2 * th * cos(2 * g2) -
+                640 * e1**2 * e2**2 * th * cos(2 * g2) -
+                240 * e1**4 * e2**2 * th * cos(2 * g2) +
+                224 * e2**2 * th**3 * cos(2 * g2) +
+                1120 * e1**2 * e2**2 * th**3 * cos(2 * g2) +
+                420 * e1**4 * e2**2 * th**3 * cos(2 * g2) -
+                140 * e1**2 * e2**2 * cos(2 * (g1 + g2)) -
+                70 * e1**4 * e2**2 * cos(2 * (g1 + g2)) +
+                336 * e1**2 * e2**2 * th * cos(2 * (g1 + g2)) +
+                168 * e1**4 * e2**2 * th * cos(2 * (g1 + g2)) +
+                588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 + g2)) +
+                294 * e1**4 * e2**2 * th**2 * cos(2 * (g1 + g2)) -
+                784 * e1**2 * e2**2 * th**3 * cos(2 * (g1 + g2)) -
+                392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 + g2)) +
+                147 * e1**4 * e2**2 * cos(2 * (2 * g1 + g2)) -
+                441 * e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) +
+                294 * e1**4 * e2**2 * th**3 * cos(2 * (2 * g1 + g2))) +
+                1 / (e1 * sqrt((1 - e2**2)**7)) * 2 * (1 - e1**2) * (m1 + m2) *
+                (m1**3 + m2**3) * m3 * (e1 * (4 + 3 * e1**2) *
+                (2 + 3 * e2**2) * (3 - 30 * th**2 + 35 * th**4) -
+                28 * (e1 + e1**3) * (2 + 3 * e2**2) *
+                (1 - 8 * th**2 + 7 * th**4) * cos(2 * g1) +
+                147 * e1**3 * (2 + 3 * e2**2) * (th**2 - 1)**2 * cos(4 * g1) -
+                10 * e1 * (4 + 3 * e1**2) * e2**2 *
+                (1 - 8 * th**2 + 7 * th**4) * cos(2 * g2) +
+                28 * (e1 + e1**3) * e2**2 * ((1 + th)**2 *
+                (1 - 7 * th + 7 * th**2) * cos(2 * (g1 - g2)) +
+                (th - 1)**2 * (1 + 7 * th + 7 * th**2) * cos(2 * (g1 + g2))) -
+                147 * e1**3 * e2**2 * (th**2 - 1) * ((1 + th)**2 *
+                cos(4 * g1 - 2 * g2) +
+                (th - 1)**2 * cos(2 * (2 * g1 + g2)))))
+            )
 
         # Eq. 13 of Blaes et al. (2002).
         de1dt = 0.
         if self.quadrupole:
-            de1dt += (30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1))
+            de1dt += (
+                30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1)
+            )
         if self.octupole:
-            de1dt += (-C3 * e2 * (1 - e1**2) / G1 * (35 * cosphi * (1 - th**2) * 
-                e1**2 * sin(2 * g1) - 10 * th * (1 - e1**2) * (1 - th**2) * 
-                cosg1 * sing2 - A * (sing1 * cosg2 - th * cosg1 * sing2)))
+            de1dt += (
+                -C3 * e2 * (1 - e1**2) / G1 * (35 * cosphi * (1 - th**2) *
+                e1**2 * sin(2 * g1) - 10 * th * (1 - e1**2) * (1 - th**2) *
+                cosg1 * sing2 - A * (sing1 * cosg2 - th * cosg1 * sing2))
+            )
         if self.gr:
-            de1dt += (-304 * G**3 * m1 * m2 * (m1 + m2) * e1 / (15 * c**4 * a1**4 * 
-                sqrt((1 - e1**2)**5)) * (1 + 121 / 304. * e1**2))
+            de1dt += (
+                -304 * G**3 * m1 * m2 * (m1 + m2) * e1 / (15 * c**4 * a1**4 *
+                sqrt((1 - e1**2)**5)) * (1 + 121 / 304. * e1**2)
+            )
         if self.hexadecapole:
-            de1dt += (-(315 * a1**3 * e1 * sqrt(1 - e1**2) * sqrt(a1 * G * (m1 +
-            m2)) * (m1**2 - m1 * m2 + m2**2) * m3 * (2 * (2 + e1**2) * (2 + 3 *
-            e2**2) * (1 - 8 * th**2 + 7 * th**4) * sin(2 * g1) - 21 * e1**2 * (2 +
-            3 * e2**2) * (th**2 - 1)**2 * sin(4 * g1) + e2**2 * (21 * e1**2 * (th -
-            1) * (1 + th)**3 * sin(4 * g1 - 2 * g2) - 2 * (2 + e1**2) * (1 + th)**2
-            * (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) - (th - 1)**2 * (2 * (2
-            + e1**2) * (1 + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) - 21 * e1**2 *
-            (th**2 - 1) * sin(2 * (2 * g1 + g2)))))) / (2048 * a2**5 * sqrt((1 -
-            e2**2)**7) * (m1 + m2)**3))
+            de1dt += (
+                -(315 * a1**3 * e1 * sqrt(1 - e1**2) * sqrt(a1 * G * (m1 + m2))
+                * (m1**2 - m1 * m2 + m2**2) * m3 * (2 * (2 + e1**2) *
+                (2 + 3 * e2**2) * (1 - 8 * th**2 + 7 * th**4) * sin(2 * g1) -
+                21 * e1**2 * (2 + 3 * e2**2) * (th**2 - 1)**2 * sin(4 * g1) +
+                e2**2 * (21 * e1**2 * (th - 1) * (1 + th)**3 *
+                sin(4 * g1 - 2 * g2) -
+                2 * (2 + e1**2) * (1 + th)**2 * (1 - 7 * th + 7 * th**2) *
+                sin(2 * (g1 - g2)) -
+                (th - 1)**2 * (2 * (2 + e1**2) * (1 + 7 * th + 7 * th**2) *
+                sin(2 * (g1 + g2)) -
+                21 * e1**2 * (th**2 - 1) * sin(2 * (2 * g1 + g2)))))) /
+                (2048 * a2**5 * sqrt((1 - e2**2)**7) * (m1 + m2)**3)
+            )
 
         dg2dt = 0.
         if self.quadrupole:
-            dg2dt += (3 * C2 * (2 * th / G1 * (2 + e1**2 * (3 - 5 * cos(2 * g1))) + 1
-                / G2 * (4 + 6 * e1**2 + (5 * th**2 - 3) * (2 + 3 * e1**2 - 5 * e1**2 *
-                cos(2 * g1))))) 
+            dg2dt += (
+                3 * C2 * (2 * th / G1 * (2 + e1**2 * (3 - 5 * cos(2 * g1))) +
+                1 / G2 * (4 + 6 * e1**2 + (5 * th**2 - 3) *
+                (2 + 3 * e1**2 - 5 * e1**2 * cos(2 * g1))))
+            )
         if self.octupole:
-            dg2dt += (-C3 * e1 * sing1 * sing2 * ((4 * e2**2 + 1) / (e2 * G2) * 10 * 
-                th * (1 - th**2) * (1 - e1**2) - e2 * (1 / G1 + th / G2) * (A + 10 * 
-                (3 * th**2 - 1) * (1 - e1**2))) - C3 * e1 * cosphi * (5 * B * th * 
-                e2 * (1 / G1 + th / G2) + (4 * e2**2 + 1) / (e2 * G2) * A))
+            dg2dt += (
+                -C3 * e1 * sing1 * sing2 * ((4 * e2**2 + 1) / (e2 * G2) * 10 *
+                th * (1 - th**2) * (1 - e1**2) - e2 * (1 / G1 + th / G2) *
+                (A + 10 * (3 * th**2 - 1) * (1 - e1**2))) -
+                C3 * e1 * cosphi * (5 * B * th * e2 * (1 / G1 + th / G2) +
+                (4 * e2**2 + 1) / (e2 * G2) * A)
+            )
         if self.hexadecapole:
-            dg2dt += ((9 * a1**3 * (-1 / sqrt(1 - e1**2) * 10 * a2 * sqrt(a1 * G *
-            (m1 + m2)) * (m1**2 - m1 * m2 + m2**2) * (sqrt(1 - e2**2) * m2**2 * m3
-            * sqrt(a2 * G * (m1 + m2 + m3)) + m1**2 * (sqrt(1 - e2**2) * m3 *
-            sqrt(a2 * G * (m1 + m2 + m3)) + sqrt(1 - e1**2) * m2 * sqrt(a1 * G *
-            (m1 + m2)) * th) + m1 * m2 * (2 * sqrt(1 - e2**2) * m3 * sqrt(a2 * G *
-            (m1 + m2 + m3)) + sqrt(1 - e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) * th
-            + sqrt(1 - e1**2) * sqrt(a1 * G * (m1 + m2)) * m3 * th)) * (96 * th +
-            480 * e1**2 * th + 180 * e1**4 * th + 144 * e2**2 * th + 720 * e1**2 *
-            e2**2 * th + 270 * e1**4 * e2**2 * th - 224 * th**3 - 1120 * e1**2 *
-            th**3 - 420 * e1**4 * th**3 - 336 * e2**2 * th**3 - 1680 * e1**2 *
-            e2**2 * th**3 - 630 * e1**4 * e2**2 * th**3 + 56 * e1**2 * (2 + e1**2)
-            * (2 + 3 * e2**2) * th * (7 * th**2 - 4) * cos(2 * g1) - 294 * e1**4 *
-            (2 + 3 * e2**2) * th * (th**2 - 1) * cos(4 * g1) - 147 * e1**4 *
-            e2**2 * cos(4 * g1 - 2 * g2) + 441 * e1**4 * e2**2 * th**2 *
-            cos(4 * g1 - 2 * g2) + 294 * e1**4 * e2**2 * th**3 * cos(4 * g1 - 2 *
-            g2) + 140 * e1**2 * e2**2 * cos(2 * (g1 - g2)) + 70 * e1**4 * e2**2 *
-            cos(2 * (g1 - g2)) + 336 * e1**2 * e2**2 * th * cos(2 * (g1 - g2)) +
-            168 * e1**4 * e2**2 * th * cos(2 * (g1 - g2)) - 588 * e1**2 * e2**2 *
-            th**2 * cos(2 * (g1 - g2)) - 294 * e1**4 * e2**2 * th**2 * cos(2 * (g1
-            - g2)) - 784 * e1**2 * e2**2 * th**3 * cos(2 * (g1 - g2)) - 392 * e1**4
-            * e2**2 * th**3 * cos(2 * (g1 - g2)) - 128 * e2**2 * th * cos(2 * g2) -
-            640 * e1**2 * e2**2 * th * cos(2 * g2) - 240 * e1**4 * e2**2 * th *
-            cos(2 * g2) + 224 * e2**2 * th**3 * cos(2 * g2) + 1120 * e1**2 * e2**2
-            * th**3 * cos(2 * g2) + 420 * e1**4 * e2**2 * th**3 * cos(2 * g2) - 140
-            * e1**2 * e2**2 * cos(2 * (g1 + g2)) - 70 * e1**4 * e2**2 * cos(2 * (g1
-            + g2)) + 336 * e1**2 * e2**2 * th * cos(2 * (g1 + g2)) + 168 * e1**4 *
-            e2**2 * th * cos(2 * (g1 + g2)) + 588 * e1**2 * e2**2 * th**2 * cos(2
-            * (g1 + g2)) + 294 * e1**4 * e2**2 * th**2 * cos(2 * (g1 + g2)) - 784 *
-            e1**2 * e2**2 * th**3 * cos(2 * (g1 + g2)) - 392 * e1**4 * e2**2 *
-            th**3 * cos(2 * (g1 + g2)) + 147 * e1**4 * e2**2 * cos(2 * (2 * g1 +
-            g2)) - 441 * e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) + 294 *
-            e1**4 * e2**2 * th**3 * cos(2 * (2 * g1 + g2))) + a1 * a2 * G * m1 * m2
-            * (m1**3 + m2**3) * (m1 + m2 + m3) * (-6 * (8 + 40 * e1**2 + 15 *
-            e1**4) * (-1 + e2**2) * (3 - 30 * th**2 + 35 * th**4) + 7 * (8 + 40 *
-            e1**2 + 15 * e1**4) * (2 + 3 * e2**2) * (3 - 30 * th**2 + 35 * th**4)
-            + 840 * e1**2 * (2 + e1**2) * (-1 + e2**2) * (1 - 8 * th**2 + 7 *
-            th**4) * cos(2 * g1) - 980 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) * (1
-            - 8 * th**2 + 7 * th**4) * cos(2 * g1) - 4410 * e1**4 * (-1 + e2**2) *
-            (-1 + th**2)**2 * cos(4 * g1) + 5145 * e1**4 * (2 + 3 * e2**2) * (-1 +
-            th**2)**2 * cos(4 * g1) - 70 * (8 + 40 * e1**2 + 15 * e1**4) * e2**2 *
-            (1 - 8 * th**2 + 7 * th**4) * cos(2 * g2) + 20 * (8 + 40 * e1**2 + 15 *
-            e1**4) * (-1 + e2**2) * (1 - 8 * th**2 + 7 * th**4) * cos(2 * g2) + 980
-            * e1**2 * (2 + e1**2) * e2**2 * ((1 + th)**2 * (1 - 7 * th + 7 * th**2)
-            * cos(2 * (g1 - g2)) + (-1 + th)**2 * (1 + 7 * th + 7 * th**2) * cos(2
-            * (g1 + g2))) - 280 * e1**2 * (2 + e1**2) * (-1 + e2**2) * ((1 + th)**2
-            * (1 - 7 * th + 7 * th**2)    * cos(2 * (g1 - g2)) + (-1 + th)**2 * (1 +
-            7 * th + 7 * th**2) * cos(2 * (g1 + g2))) - 1470 * e1**4 * (1 - e2**2)
-            * (-1 + th) * (1 + th) * ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (-1 +
-            th)**2 * cos(2 * (2 * g1 + g2))) - 5145 * e1**4 * e2**2 * (-1 + th**2)
-            * ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (-1 + th)**2 * cos(2 * (2 * g1
-            + g2)))))) / (8192 * a2**6 * (-1 + e2**2)**4 * (m1 + m2)**5 * sqrt(a2 *
-            G * (m1 + m2 + m3))))
+            dg2dt += (
+                (9 * a1**3 * (-1 / sqrt(1 - e1**2) * 10 * a2 * sqrt(a1 * G *
+                (m1 + m2)) * (m1**2 - m1 * m2 + m2**2) * (sqrt(1 - e2**2) *
+                m2**2 * m3 * sqrt(a2 * G * (m1 + m2 + m3)) + m1**2 *
+                (sqrt(1 - e2**2) * m3 * sqrt(a2 * G * (m1 + m2 + m3)) +
+                sqrt(1 - e1**2) * m2 * sqrt(a1 * G * (m1 + m2)) * th) +
+                m1 * m2 * (2 * sqrt(1 - e2**2) * m3 *
+                sqrt(a2 * G * (m1 + m2 + m3)) + sqrt(1 - e1**2) * m2 *
+                sqrt(a1 * G * (m1 + m2)) * th + sqrt(1 - e1**2) *
+                sqrt(a1 * G * (m1 + m2)) * m3 * th)) *
+                (96 * th + 480 * e1**2 * th + 180 * e1**4 * th +
+                144 * e2**2 * th + 720 * e1**2 * e2**2 * th +
+                270 * e1**4 * e2**2 * th - 224 * th**3 - 1120 * e1**2 * th**3 -
+                420 * e1**4 * th**3 -
+                336 * e2**2 * th**3 - 1680 * e1**2 * e2**2 * th**3 -
+                630 * e1**4 * e2**2 * th**3 +
+                56 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) * th *
+                (7 * th**2 - 4) * cos(2 * g1) -
+                294 * e1**4 * (2 + 3 * e2**2) * th * (th**2 - 1) *
+                cos(4 * g1) -
+                147 * e1**4 * e2**2 * cos(4 * g1 - 2 * g2) +
+                441 * e1**4 * e2**2 * th**2 * cos(4 * g1 - 2 * g2) +
+                294 * e1**4 * e2**2 * th**3 * cos(4 * g1 - 2 * g2) +
+                140 * e1**2 * e2**2 * cos(2 * (g1 - g2)) +
+                70 * e1**4 * e2**2 * cos(2 * (g1 - g2)) +
+                336 * e1**2 * e2**2 * th * cos(2 * (g1 - g2)) +
+                168 * e1**4 * e2**2 * th * cos(2 * (g1 - g2)) -
+                588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 - g2)) -
+                294 * e1**4 * e2**2 * th**2 * cos(2 * (g1 - g2)) -
+                784 * e1**2 * e2**2 * th**3 * cos(2 * (g1 - g2)) -
+                392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 - g2)) -
+                128 * e2**2 * th * cos(2 * g2) -
+                640 * e1**2 * e2**2 * th * cos(2 * g2) -
+                240 * e1**4 * e2**2 * th * cos(2 * g2) +
+                224 * e2**2 * th**3 * cos(2 * g2) +
+                1120 * e1**2 * e2**2 * th**3 * cos(2 * g2) +
+                420 * e1**4 * e2**2 * th**3 * cos(2 * g2) -
+                140 * e1**2 * e2**2 * cos(2 * (g1 + g2)) -
+                70 * e1**4 * e2**2 * cos(2 * (g1 + g2)) +
+                336 * e1**2 * e2**2 * th * cos(2 * (g1 + g2)) +
+                168 * e1**4 * e2**2 * th * cos(2 * (g1 + g2)) +
+                588 * e1**2 * e2**2 * th**2 * cos(2 * (g1 + g2)) +
+                294 * e1**4 * e2**2 * th**2 * cos(2 * (g1 + g2)) -
+                784 * e1**2 * e2**2 * th**3 * cos(2 * (g1 + g2)) -
+                392 * e1**4 * e2**2 * th**3 * cos(2 * (g1 + g2)) +
+                147 * e1**4 * e2**2 * cos(2 * (2 * g1 + g2)) -
+                441 * e1**4 * e2**2 * th**2 * cos(2 * (2 * g1 + g2)) +
+                294 * e1**4 * e2**2 * th**3 * cos(2 * (2 * g1 + g2))) +
+                a1 * a2 * G * m1 * m2 * (m1**3 + m2**3) * (m1 + m2 + m3) *
+                (-6 * (8 + 40 * e1**2 + 15 * e1**4) * (-1 + e2**2) *
+                (3 - 30 * th**2 + 35 * th**4) +
+                7 * (8 + 40 * e1**2 + 15 * e1**4) * (2 + 3 * e2**2) *
+                (3 - 30 * th**2 + 35 * th**4) +
+                840 * e1**2 * (2 + e1**2) * (-1 + e2**2) *
+                (1 - 8 * th**2 + 7 * th**4) * cos(2 * g1) -
+                980 * e1**2 * (2 + e1**2) * (2 + 3 * e2**2) *
+                (1 - 8 * th**2 + 7 * th**4) * cos(2 * g1) -
+                4410 * e1**4 * (-1 + e2**2) * (-1 + th**2)**2 * cos(4 * g1) +
+                5145 * e1**4 * (2 + 3 * e2**2) * (-1 + th**2)**2 *
+                cos(4 * g1) -
+                70 * (8 + 40 * e1**2 + 15 * e1**4) * e2**2 *
+                (1 - 8 * th**2 + 7 * th**4) * cos(2 * g2) +
+                20 * (8 + 40 * e1**2 + 15 * e1**4) * (-1 + e2**2) *
+                (1 - 8 * th**2 + 7 * th**4) * cos(2 * g2) +
+                980 * e1**2 * (2 + e1**2) * e2**2 * ((1 + th)**2 *
+                (1 - 7 * th + 7 * th**2) * cos(2 * (g1 - g2)) +
+                (-1 + th)**2 * (1 + 7 * th + 7 * th**2) * cos(2 * (g1 + g2))) -
+                280 * e1**2 * (2 + e1**2) * (-1 + e2**2) * ((1 + th)**2
+                * (1 - 7 * th + 7 * th**2) * cos(2 * (g1 - g2)) +
+                (-1 + th)**2 * (1 + 7 * th + 7 * th**2) * cos(2 * (g1 + g2))) -
+                1470 * e1**4 * (1 - e2**2) * (-1 + th) * (1 + th) *
+                ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (-1 + th)**2 *
+                cos(2 * (2 * g1 + g2))) -
+                5145 * e1**4 * e2**2 * (-1 + th**2) * ((1 + th)**2 *
+                cos(4 * g1 - 2 * g2) +
+                (-1 + th)**2 * cos(2 * (2 * g1 + g2)))))) /
+                (8192 * a2**6 * (-1 + e2**2)**4 * (m1 + m2)**5 *
+                sqrt(a2 * G * (m1 + m2 + m3)))
+            )
 
         # Eq. 16 of Blaes et al. (2002).
         de2dt = 0.
         if self.octupole:
-            de2dt += (C3 * e1 * (1 - e2**2) / G2 * (10 * th * (1 - th**2) * (1 -
-            e1**2) * sing1 * cosg2 + A * (cosg1 * sing2 - th * sing1 * cosg2)))
+            de2dt += (
+                C3 * e1 * (1 - e2**2) / G2 * (10 * th * (1 - th**2) *
+                (1 - e1**2) * sing1 * cosg2 +
+                A * (cosg1 * sing2 - th * sing1 * cosg2))
+            )
         if self.hexadecapole:
-            de2dt += ((45 * a1**4 * e2 * m1 * m2 * (m1**2 - m1 * m2 + m2**2) *
-                sqrt(a2 * G * (m1 + m2 + m3)) * (-147 * e1**4 * (-1 + th) * (1 +
-                th)**3 * sin(4 * g1 - 2 * g2) + 28 * e1**2 * (2 + e1**2) * (1 +
-                th)**2 * (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) + (-1 + th) *
-                (2 * (8 + 40 * e1**2 + 15 * e1**4) * (-1 - th + 7 * th**2 + 7 *
-                th**3) * sin(2 * g2) - 7 * e1**2 * (-1 + th) * (4 * (2 + e1**2) * (1
-                + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) - 21 * e1**2 * (-1 + th**2)
-                * sin(2 * (2 * g1 + g2))))) / (4096 * a2**6 * (-1 + e2**2)**3 * (m1 +
-                m2)**4)))
+            de2dt += (
+                45 * a1**4 * e2 * m1 * m2 * (m1**2 - m1 * m2 + m2**2) *
+                sqrt(a2 * G * (m1 + m2 + m3)) *
+                (-147 * e1**4 * (-1 + th) * (1 + th)**3 *
+                sin(4 * g1 - 2 * g2) +
+                28 * e1**2 * (2 + e1**2) * (1 + th)**2 *
+                (1 - 7 * th + 7 * th**2) * sin(2 * (g1 - g2)) +
+                (-1 + th) * (2 * (8 + 40 * e1**2 + 15 * e1**4) *
+                (-1 - th + 7 * th**2 + 7 * th**3) * sin(2 * g2) -
+                7 * e1**2 * (-1 + th) * (4 * (2 + e1**2) *
+                (1 + 7 * th + 7 * th**2) * sin(2 * (g1 + g2)) -
+                21 * e1**2 * (-1 + th**2) * sin(2 * (2 * g1 + g2))))) /
+                (4096 * a2**6 * (-1 + e2**2)**3 * (m1 + m2)**4)
+            )
 
         # Eq. 17 of Blaes et al. (2002).
         dHdt = 0.
         if self.gr:
-            dHdt += (-32 * G**3 * m1**2 * m2**2 / (5 * c**5 * a1**3 * 
-                (1 - e1**2)**2) * sqrt(G * (m1 + m2) / a1) * (1 + 7 / 8. * e1**2) * 
-                (G1 + G2 * th) / H)
+            dHdt += (
+                -32 * G**3 * m1**2 * m2**2 /
+                (5 * c**5 * a1**3 * (1 - e1**2)**2) *
+                sqrt(G * (m1 + m2) / a1) * (1 + 7 / 8. * e1**2) *
+                (G1 + G2 * th) / H
+            )
         # fmt: on
 
         der = [da1dt, de1dt, dg1dt, de2dt, dg2dt, dHdt]
@@ -655,9 +732,12 @@ class TripleDelaunay:
             ] = -1  # Don't print FORTRAN errors.
 
     def reset(self):
-        """Reset the triple to its initial configuration.    This resets the
-        orbital parameters and time, but does not reset the integration
-        options."""
+        """Reset the triple to its initial configuration.
+
+        This resets the orbital parameters and time, but does not reset the
+        integration options.
+
+        """
         self.t = 0
         for key in self.initial_state:
             setattr(self, key, self.initial_state[key])
@@ -697,9 +777,10 @@ class TripleDelaunay:
 
     def extrema(self, tstop):
         """Integrate the triple, but only save the eccentricity extrema.
-        
+
         Parameters:
             tstop: The time to integrate in years
+
         """
 
         self.tstop = tstop
@@ -707,7 +788,6 @@ class TripleDelaunay:
         self.integrator_setup()
         self.integration_steps = np.zeros((self.maxoutput, n_columns))
 
-        t_prev = 0
         e_prev = 0
         e_prev2 = 0
         output_index = 0
@@ -716,7 +796,7 @@ class TripleDelaunay:
         while (
             self.t < self.tstop and time.time() - self.tstart < self.cputstop
         ):
-
+            prevstate = self.state()
             self._step()
             if e_prev2 < e_prev > self.e1:
                 self.integration_steps[output_index] = prevstate
@@ -725,15 +805,13 @@ class TripleDelaunay:
                 self.integration_steps[output_index] = prevstate
                 output_index += 1
 
-            # Check for collisions
+            # Check for collisions.
             if self.a1 * (1 - self.e1) < self.r1 + self.r2:
                 self.collision = True
                 break
 
-            t_prev = self.t
             e_prev2 = e_prev
             e_prev = self.e1
-            prevstate = self.state()
 
         return self.integration_steps[:output_index]
 
@@ -745,7 +823,6 @@ class TripleDelaunay:
         self.integrator_setup()
         self.integration_steps = np.zeros((self.maxoutput, n_columns))
 
-        t_prev = 0
         e_prev = 0
         e_prev2 = 0
         sign_prev = np.sign(self.th)
@@ -754,16 +831,15 @@ class TripleDelaunay:
         while (
             self.t < self.tstop and time.time() - self.tstart < self.cputstop
         ):
+            prevstate = self.state()
             self._step()
             if e_prev2 < e_prev > self.e1:
                 if np.sign(self.th) != sign_prev:
                     self.integration_steps[output_index] = prevstate
                     output_index += 1
                 sign_prev = np.sign(self.th)
-            t_prev = self.t
             e_prev2 = e_prev
             e_prev = self.e1
-            prevstate = self.state()
 
         return self.integration_steps[:output_index]
 
