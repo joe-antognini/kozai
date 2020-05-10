@@ -34,6 +34,6 @@ setup(
     ],
     tests_require=['pytest>=5.4.2'],
     url='https://github.com/joe-antognini/kozai',
-    version='1.0.0',
+    version='0.3.0',
     zip_safe=False,
 )
