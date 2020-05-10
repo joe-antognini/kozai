@@ -1,7 +1,8 @@
 *.swp
 *~
 *.pyc
-/dist/
-/*.egg-info
-/*.egg
-/docs/.ipynb_checkpoints/
+build/
+dist/
+*.egg-info
+*.egg
+docs/.ipynb_checkpoints/
