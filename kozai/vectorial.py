@@ -13,11 +13,11 @@ import numpy as np
 from scipy.integrate import ode
 from scipy.optimize import root
 
-from _kozai_constants import au
-from _kozai_constants import G
-from _kozai_constants import M_sun
-from _kozai_constants import R_sun
-from _kozai_constants import yr2s
+from ._kozai_constants import au
+from ._kozai_constants import G
+from ._kozai_constants import M_sun
+from ._kozai_constants import R_sun
+from ._kozai_constants import yr2s
 
 
 class TripleVectorial:
