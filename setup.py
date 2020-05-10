@@ -4,8 +4,8 @@ from setuptools import setup
 
 
 def readme():
-  with open('README.md') as f:
-    return f.read()
+    with open('README.md') as f:
+        return f.read()
 
 
 setup(
@@ -19,7 +19,6 @@ setup(
         'Topic :: Scientific/Engineering :: Astronomy',
         'Topic :: Scientific/Engineering :: Physics',
     ],
-    cmdclass = {'test': PyTest},
     description='Evolve hierarchical triples.',
     install_requires=['numpy>=1.18.4', 'scipy>=1.4.1'],
     keywords='kozai lidov triple dynamics orbit star',
@@ -29,8 +28,8 @@ setup(
     packages=['kozai'],
     python_requires='>=3.6',
     scripts=[
-      'scripts/kozai', 
-      'scripts/kozai-test-particle', 
+      'scripts/kozai',
+      'scripts/kozai-test-particle',
       'scripts/kozai-ekm'],
     tests_require=['pytest>=5.4.2'],
     url='https://github.com/joe-antognini/kozai',

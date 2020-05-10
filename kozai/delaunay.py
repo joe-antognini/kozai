@@ -1,55 +1,48 @@
-#! /usr/bin/env python 
+"""Numerically integrate the dynamics of a hierarchical triple."""
 
-'''
-delaunay
-
-Numerically integrate the dynamics of a hierarchical triple.
-'''
-
-# System modules
 import json
 import time
-
-# Numerical modules
 from math import sqrt, cos, sin, pi, acos
+
 import numpy as np
 from scipy.integrate import ode, quad
 
-# Kozai modules
 from _kozai_constants import *
 
-class TripleDelaunay(object):
-  '''Evolve a hierarchical triple using the Delaunay orbital elements (as
-  opposed to the vectorial notation).  This class handles triples in which
-  all objects are massive.  To integrate in the test particle approximation
-  use the Triple_vector class.
 
-  Parameters:
-    a1: Semi-major axis of inner binary in AU
-    a2: Semi-major axis of outer binary in AU
-    e1: Eccentricity of inner binary
-    e2: Eccentricity of outer binary
-    inc: Inclination between inner and outer binaries in degrees
-    g1: Argument of periapsis of the inner binary in degrees
-    g2: Argument of periapsis of the outer binary in degrees
-    m1: Mass of component 1 of the inner binary in solar masses
-    m2: Mass of component 2 of the inner binary in solar masses
-    m3: Mass of the tertiary in solar masses
-    r1: Radius of component 1 of the inner binary in solar radii
-    r2: Radius of component 2 of the inner binary in solar radii
+class TripleDelaunay:
+  """Evolve a hierarchical triple using the Delaunay orbital elements.
 
-  Other parameters:
-    tstop: The time to integrate in years
-    cputstop: The wall time to integrate in seconds
-    outfreq: The number of steps between saving output
-    atol: Absolute tolerance of the integrator
-    rotl: Relative tolerance of the integrator
-    quadrupole: Toggle the quadrupole term
-    octupole: Toggle the octupole term
-    hexadecapole: Toggle the hexadecapole term
-    gr: Toggle GR effects
-    algo: Set the integration algorithm (see the scipy.ode docs)
-  '''
+  This class handles triples in which all objects are massive.  To integrate in
+  the test particle approximation use the Triple_vector class.
+
+  Args:
+    a1: Semi-major axis of inner binary in AU.
+    a2: Semi-major axis of outer binary in AU.
+    e1: Eccentricity of inner binary.
+    e2: Eccentricity of outer binary.
+    inc: Inclination between inner and outer binaries in degrees.
+    g1: Argument of periapsis of the inner binary in degrees.
+    g2: Argument of periapsis of the outer binary in degrees.
+    m1: Mass of component 1 of the inner binary in solar masses.
+    m2: Mass of component 2 of the inner binary in solar masses.
+    m3: Mass of the tertiary in solar masses.
+    r1: Radius of component 1 of the inner binary in solar radii.
+    r2: Radius of component 2 of the inner binary in solar radii.
+
+  Attributes:
+    tstop: The time to integrate in years.
+    cputstop: The wall time to integrate in seconds.
+    outfreq: The number of steps between saving output.
+    atol: Absolute tolerance of the integrator.
+    rotl: Relative tolerance of the integrator.
+    quadrupole: Toggle the quadrupole term.
+    octupole: Toggle the octupole term.
+    hexadecapole: Toggle the hexadecapole term.
+    gr: Toggle GR effects.
+    algo: Set the integration algorithm (see the scipy.ode docs).
+
+  """
 
   def __init__(self, a1=1, a2=20, e1=.1, e2=.3, inc=80, g1=0, g2=0, m1=1., 
     m2=1., m3=1., r1=0, r2=0):
@@ -87,18 +80,15 @@ class TripleDelaunay(object):
     # Store the initial state
     self.save_as_initial()
 
-  ###
-  ### Unit conversions & variable definitions
-  ###
-  ### Properties beginning with an underscore are stored in radians or SI
-  ### units.  Most calculations are much easier when done in SI, but it is
-  ### inconvenient for the user to deal with SI units.  Thus, the properties
-  ### can be set using AU, M_sun, degrees, yr, or whatever other units are
-  ### appropriate.
-  ###
+  # Unit conversions & variable definitions.
+  #
+  # Properties beginning with an underscore are stored in radians or SI
+  # units.  Most calculations are much easier when done in SI, but it is
+  # inconvenient for the user to deal with SI units.  Thus, the properties
+  # can be set using AU, M_sun, degrees, yr, or whatever other units are
+  # appropriate.
 
   # Times
-
   @property
   def t(self):
     '''Time in yr'''
@@ -110,7 +100,6 @@ class TripleDelaunay(object):
     self._t = val * yr2s
   
   # Masses
-
   @property
   def m1(self):
     '''m1 in solar masses'''
@@ -125,7 +114,7 @@ class TripleDelaunay(object):
     self._m1 = val * M_sun
 
     if self._H is not None:
-      self.inc = inc # Reset the total ang. momentum
+      self.inc = inc # Reset the total ang. momentum.
 
   @property
   def m2(self):
@@ -141,7 +130,7 @@ class TripleDelaunay(object):
     self._m2 = val * M_sun
 
     if self._H is not None:
-      self.inc = inc # Reset the total ang. momentum
+      self.inc = inc # Reset the total ang. momentum.
 
   @property
   def m3(self):
@@ -157,7 +146,7 @@ class TripleDelaunay(object):
     self._m3 = val * M_sun
 
     if self._H is not None:
-      self.inc = inc # Reset the total ang. momentum
+      self.inc = inc # Reset the total ang. momentum.
 
   # Distances
 
@@ -175,7 +164,7 @@ class TripleDelaunay(object):
     self._a1 = val * au
 
     if self._H is not None:
-      self.inc = inc # Reset the total ang. momentum
+      self.inc = inc # Reset the total ang. momentum.
 
   @property
   def a2(self):
@@ -191,7 +180,7 @@ class TripleDelaunay(object):
     self._a2 = val * au
 
     if self._H is not None:
-      self.inc = inc # Reset the total ang. momentum
+      self.inc = inc # Reset the total ang. momentum.
 
   @property
   def r1(self):
@@ -214,7 +203,6 @@ class TripleDelaunay(object):
     self._r2 = val * R_sun
 
   # Angles
-
   @property
   def g1(self):
     '''g1 in degrees'''
@@ -264,7 +252,6 @@ class TripleDelaunay(object):
       cos(val * pi / 180))
 
   # Angular momenta
-
   @property
   def _G1(self):
     '''Calculate G1.  See Eq. 6 of Blaes et al. (2002).'''
@@ -278,7 +265,6 @@ class TripleDelaunay(object):
       - self.e2**2) / (self._m1 + self._m2 + self._m3)))
 
   # Energies
-
   @property
   def C2(self):
     '''Calculate C2.  See Eq. 18 of Blaes et al., (2002).'''
@@ -294,7 +280,6 @@ class TripleDelaunay(object):
       self.e2**2)**(5./2)) * (self._a1 / self._a2)**3)
 
   # Other parameters
-
   @property
   def epsoct(self):
     return self.e2 / (1 - self.e2**2) * (self.a1 / self.a2)
@@ -340,17 +325,14 @@ class TripleDelaunay(object):
     self.initial_state['r2'] = self.r2
     self.initial_state['inc'] = self.inc
 
-  ###
-  ### Integration routines
-  ###
-
+  # Integration routines
   def _deriv(self, t, y):
     '''The EOMs.  See Eqs. 11 -- 17 of Blaes et al. (2002).'''
 
-    # Unpack the values
+    # Unpack the values.
     a1, e1, g1, e2, g2, H = y
 
-    # Calculate trig functions only once
+    # Calculate trig functions only once.
     sing1 = sin(g1)
     sing2 = sin(g2)
     cosg1 = cos(g1)
@@ -376,13 +358,13 @@ class TripleDelaunay(object):
     B = 2 + 5 * e1**2 - 7 * e1**2 * cos(2 * g1)
     A = 4 + 3 * e1**2 - 5 / 2. * (1 - th**2) * B
 
-    # Eq. 11 of Blaes et al. (2002)
+    # Eq. 11 of Blaes et al. (2002).
     da1dt = 0.
     if self.gr:
       da1dt += -(64 * G**3 * m1 * m2 * (m1 + m2) / (5 * c**5 * a1**3 * 
         sqrt((1 - e1**2)**7)) * (1 + 73 / 24. * e1**2 + 37 / 96. * e1**4))
 
-    # Eq. 12 of Blaes et al. (2002)
+    # Eq. 12 of Blaes et al. (2002).
     dg1dt = 0.
     if self.quadrupole:
       dg1dt += (6 * C2 * (1 / G1 * (4 * th**2 + (5 * cos(2 * g1) - 1) * (1 -
@@ -441,7 +423,7 @@ class TripleDelaunay(object):
         ((1 + th)**2 * cos(4 * g1 - 2 * g2) + (th - 1)**2 * cos(2 * (2 * g1 +
         g2))))))
 
-    # Eq. 13 of Blaes et al. (2002)
+    # Eq. 13 of Blaes et al. (2002).
     de1dt = 0.
     if self.quadrupole:
       de1dt += (30 * C2 * e1 * (1 - e1**2) / G1 * (1 - th**2) * sin(2 * g1))
@@ -527,7 +509,7 @@ class TripleDelaunay(object):
       + g2)))))) / (8192 * a2**6 * (-1 + e2**2)**4 * (m1 + m2)**5 * sqrt(a2 *
       G * (m1 + m2 + m3))))
 
-    # Eq. 16 of Blaes et al. (2002)
+    # Eq. 16 of Blaes et al. (2002).
     de2dt = 0.
     if self.octupole:
       de2dt += (C3 * e1 * (1 - e2**2) / G2 * (10 * th * (1 - th**2) * (1 -
@@ -543,7 +525,7 @@ class TripleDelaunay(object):
         * sin(2 * (2 * g1 + g2))))) / (4096 * a2**6 * (-1 + e2**2)**3 * (m1 +
         m2)**4)))
 
-    # Eq. 17 of Blaes et al. (2002)
+    # Eq. 17 of Blaes et al. (2002).
     dHdt = 0.
     if self.gr:
       dHdt += (-32 * G**3 * m1**2 * m2**2 / (5 * c**5 * a1**3 * 
@@ -569,13 +551,13 @@ class TripleDelaunay(object):
 
     self._y = [self._a1, self.e1, self._g1, self.e2, self._g2, self._H]
 
-    # Set up the integrator
+    # Set up the integrator.
     self.solver = ode(self._deriv)
     self.solver.set_integrator(self.algo, nsteps=1, atol=self.atol, 
       rtol=self.rtol)
     self.solver.set_initial_value(self._y, self._t)
     if self.algo == 'vode':
-      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors.
 
   def reset(self):
     '''Reset the triple to its initial configuration.  This resets the
@@ -686,18 +668,26 @@ class TripleDelaunay(object):
     return self.integration_steps[:output_index]
 
   def state(self):
-    '''Return a tuple with the dynamical state of the system.
+    """Return a tuple with the dynamical state of the system.
 
     Returns:
-      (t, a1, e1, g1, a2, e2, g2, inc)
-    '''
+      t: The time.
+      a1: The semi-major axis of the inner binary.
+      e1: The eccentricity of the inner binary.
+      g1: The argument of periapsis of the inner binary.
+      a2: The semi-major axis of the outer binary.
+      e2: The eccentricity of the outer binary.
+      g2: The argumetn of periapsis of the outer binary.
+      inc: The inclination.
+
+    """
     return (self.t, self.a1, self.e1, self.g1, self.a2, self.e2, self.g2, 
       self.inc)
-  
-  def __repr__(self):
-    '''Print out the initial values in JSON format.'''
 
-    # Get the initial state
+  def __repr__(self):
+    """Print out the initial values in JSON format."""
+
+    # Get the initial state.
     json_data = self.initial_state
 
     # Add some other properties

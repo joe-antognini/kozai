@@ -1,30 +1,27 @@
-#! /usr/bin/env python
+"""Code to model the eccentric Kozai mechanism.
 
-'''
-ekm
+Numerically integrate only the octupole term of the equations of motion of a
+hierarchical triple.  This procedure averages over not only the individual
+orbits, but also the individual KL cycles as well.
 
-Numerically integrate only the octupole term of the equations of motion of
-a hierarchical triple.  This procedure averages over not only the
-individual orbits, but also the individual KL cycles as well.
-'''
+"""
 
-# System modules
 import json
 import time
-
-# Numerical modules
 from math import acos, cos, pi, sin, sqrt
+
 import numpy as np
 from scipy.integrate import ode, quad
 from scipy.optimize import brentq
 from scipy.special import ellipk, ellipe
 
-# Kozai modules
 from _kozai_constants import *
 
-class TripleOctupole(object):
-  '''A hierachical triple where only the octupole term of the Hamiltonian is
-  considered.  The quadrupole term is averaged over.
+
+class TripleOctupole:
+  """A hierarchical triple with only the octupole term in the Hamiltonian.
+
+  The quadrupole term is averaged over in this triple.
 
   Parameters:
     e1: Inner eccentricity
@@ -43,7 +40,8 @@ class TripleOctupole(object):
     outfile: Filename to write output to (None for stdout)
     atol: Absolute tolerance of the integrator
     rtol: Relative tolerance of the integrator
-  '''
+
+  """
 
   def __init__(self, e1=.1, inc=80, Omega=180, g1=0, epsoct=1e-2, 
     phiq=None, chi=None):
@@ -179,13 +177,13 @@ class TripleOctupole(object):
 
     self._y = [self.jz, self._Omega]
 
-    # Set up the integrator
+    # Set up the integrator.
     self.solver = ode(self._deriv)
     self.solver.set_integrator(self.algo, nsteps=1, atol=self.atol, 
       rtol=self.rtol)
     self.solver.set_initial_value(self._y, self._t)
     if self.algo == 'vode':
-      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors
+      self.solver._integrator.iwork[2] = -1 # Don't print FORTRAN errors.
 
   def reset(self):
     '''Reset the triple to its initial configuration.  This resets the
@@ -257,7 +255,7 @@ class TripleOctupole(object):
     if self.phiq < phicrit:
       CKLmin = brentq(lambda CKL: self.chi - self.epsoct - F(CKL), self.tol, self.phiq)
     else:
-      # Check if flips occur for Omega = Pi or 0
+      # Check if flips occur for Omega = Pi or 0.
       if (np.sign(self.chi - self.epsoct - F(self.tol)) != 
           np.sign(self.chi - self.epsoct - F(self.phiq))):
         CKLmin = brentq(lambda CKL: self.chi - self.epsoct - F(CKL), self.tol, self.phiq)
@@ -303,37 +301,39 @@ class TripleOctupole(object):
     return np.mean(periods)
 
   def doesflip(self):
-    '''Return True if the triple flips, false otherwise.  This is determined
-    using Eq. 16 of Katz (2011).
-    '''
+    """Check whether the triple flips.
 
-    #
+    A flip is defined to occur when the inclination passes through +/- 90
+    degrees.  This is determined using Eq. 16 of Katz (2011).
+
+    """
+
     # Calculate Delta F over many values of x.  x can range from
     #
+    # $$
     # C_KL < x < C_KL + j_z^2 / 2
-    #
+    # $$
     X = np.linspace(self.CKL, self.CKL + (self.jz)**2 / 2.)
     DeltaF = np.fabs(np.array(map(F, X)) - F(self.CKL))
 
     epsoct_crit = np.max(DeltaF) / 2.
 
-    if self.epsoct > epsoct_crit:
-      return True
-    else:
-      return False
+    return self.epsoct > epsoct_crit:
 
   def state(self):
-    '''Print out the state of the system in the format:
+    """Print out the state of the system in the format:
 
+    ```
     time  jz  Omega  <f_j>  <f_Omega>  x  C_KL
+    ```
 
-    '''
+    """
 
     return (self.t, self.jz, self.Omega, self.fj, self.fOmega, self.x,
       self.CKL)
 
   def __repr__(self):
-    '''Print out the initial values in JSON format.'''
+    """Print out the initial values in JSON format."""
 
     # Get the initial state
     json_data = self.initial_state
@@ -348,10 +348,13 @@ class TripleOctupole(object):
     json_data['maxoutput'] = self.maxoutput
 
     return json.dumps(json_data, sort_keys=True, indent=2)
+
+
 def _F_integrand(x):
   return (ellipk(x) - 2 * ellipe(x)) / (41*x - 21) / np.sqrt(2*x + 3)
 
 def F(CKL):
   x_low = (3 - 3 * CKL) / (3 + 2 * CKL)
   integral = quad(_F_integrand, x_low, 1)[0]
+
   return 32 * sqrt(3) / pi * integral

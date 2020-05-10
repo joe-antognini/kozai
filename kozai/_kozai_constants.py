@@ -1,10 +1,6 @@
-#! /usr/bin/env python
+"""Contains physical constants."""
 
-#
-# ts_constants
-#
-# All constants are in SI
-#
+# All constants are in SI.
 
 # Physical constants
 G = 6.67384e-11 # m^3 / kg / s^2
