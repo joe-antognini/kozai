@@ -97,7 +97,7 @@ class TripleVectorial:
         self.quadrupole = True
         self.octupole = True
         self.algo = 'vode'
-        self.maxoutput = 1e6
+        self.maxoutput = int(1e6)
         self.collision = False
 
         # Store the initial state.
@@ -253,12 +253,12 @@ class TripleVectorial:
     @property
     def Phi0(self):
         """The normalization of the potential."""
+        # fmt: off
         return (
-            G
-            * self._m3
-            * self._a1**2
-            / (self._a2**3 * (1 - self.e2**2)**(3.0 / 2))
+            G * self._m3 * self._a1**2 /
+            (self._a2**3 * (1 - self.e2**2)**(3 / 2))
         )
+        # fmt: on
 
     @property
     def epsoct(self):
@@ -268,23 +268,21 @@ class TripleVectorial:
     @property
     def Hhatquad(self):
         """The normalized quadrupole term of the Hamiltonian"""
-        return (2 + 3 * self.e1**2) * (
-            1 - 3 * self.th**2
+        # fmt: off
+        return (
+            2 + 3 * self.e1**2) * (1 - 3 * self.th**2
         ) - 15 * self.e1**2 * (1 - self.th**2) * cos(2 * self._g1)
+        # fmt: on
 
     @property
     def phiq(self):
         """The quadrupole term of the potential"""
+        # fmt: off
         return (
-            3
-            / 4.0
-            * (
-                self.jvec[2]**2 / 2.0
-                + self.e1**2
-                - 5 / 2.0 * self.evec[2]**2
-                - 1 / 6.0
-            )
+            3 / 4 * (self.jvec[2]**2 / 2 + self.e1**2 -
+            5 / 2 * self.evec[2]**2 - 1 / 6)
         )
+        # fmt: on
 
     @property
     def phioct(self):
@@ -351,15 +349,15 @@ class TripleVectorial:
         e_sq = ex**2 + ey**2 + ez**2
 
         # Calculate the derivatives of phi.
-        grad_j_phi_q = np.array([0, 0, 3 / 4.0 * jz])
-        grad_j_phi_oct = -75 / 32.0 * np.array([ez * jz, 0, ex * jz + ez * jx])
-        grad_e_phi_q = np.array([3 / 2.0 * ex, 3 / 2.0 * ey, -9 / 4.0 * ez])
+        grad_j_phi_q = np.array([0, 0, 3 / 4 * jz])
+        grad_j_phi_oct = -75 / 32 * np.array([ez * jz, 0, ex * jz + ez * jx])
+        grad_e_phi_q = np.array([3 / 2 * ex, 3 / 2 * ey, -9 / 4 * ez])
         grad_e_phi_oct = np.array(
             [
-                75 / 64.0 * (1 / 5.0 - 8 / 5.0 * e_sq + 7 * ez**2 - jz**2)
-                - 15 / 4.0 * ex**2,
-                -15 / 4.0 * ex * ey,
-                75 / 64.0 * (54 / 5.0 * ex * ez - 2 * jx * jz),
+                75 / 64 * (1 / 5 - 8 / 5 * e_sq + 7 * ez**2 - jz**2)
+                - 15 / 4 * ex**2,
+                -15 / 4 * ex * ey,
+                75 / 64 * (54 / 5 * ex * ez - 2 * jx * jz),
             ]
         )
 
@@ -421,14 +419,14 @@ class TripleVectorial:
             self._step()
             if self.nstep % self.outfreq == 0:
                 self.integration_steps[
-                    self.nstep / self.outfreq
+                    self.nstep // self.outfreq
                 ] = self.state()
 
             if self.a1 * (1 - self.e1) < self.r1 + self.r2:
                 self.collision = True
                 break
 
-        laststep = (self.nstep / self.outfreq) + 1
+        laststep = (self.nstep // self.outfreq) + 1
         self.integration_steps[laststep] = self.state()
 
         return self.integration_steps[: laststep + 1]
@@ -578,7 +576,7 @@ def _evec_root(x, j, g1):
     cond1 = x[0] * j[0] + x[1] * j[1] + x[2] * j[2]
 
     # Normalized
-    cond2 = x[0]**2 + x[1]**2 + x[2]**2 - 1.0
+    cond2 = x[0]**2 + x[1]**2 + x[2]**2 - 1
 
     # Gives the right argument of periapsis.
     crossnorm = np.sqrt(j[0]**2 + j[1]**2)

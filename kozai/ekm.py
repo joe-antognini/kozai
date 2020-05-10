@@ -57,12 +57,12 @@ class TripleOctupole:
             self.Omega = Omega
             self.g1 = g1
 
-            CKL = self.e1 ** 2 * (
-                1 - 5 / 2.0 * sin(_inc) ** 2 * sin(self._g1) ** 2
+            CKL = self.e1**2 * (
+                1 - 5 / 2.0 * sin(_inc)**2 * sin(self._g1)**2
             )
-            self.jz = sqrt(1 - self.e1 ** 2) * cos(_inc)
+            self.jz = sqrt(1 - self.e1**2) * cos(_inc)
 
-            self._phiq = CKL + self.jz ** 2 / 2
+            self._phiq = CKL + self.jz**2 / 2
             self._chi = F(CKL) - self.epsoct * cos(self._Omega)
 
         else:
@@ -81,7 +81,7 @@ class TripleOctupole:
         self.atol = 1e-9
         self.rtol = 1e-9
         self.tol = 1e-5
-        self.maxoutput = 1e6
+        self.maxoutput = int(1e6)
 
         # Store the initial state
         self.save_as_initial()
@@ -98,7 +98,7 @@ class TripleOctupole:
     @property
     def CKL(self):
         """The libration constant"""
-        return self.phiq - self.jz ** 2 / 2.0
+        return self.phiq - self.jz**2 / 2.0
 
     @property
     def fj(self):
@@ -125,7 +125,7 @@ class TripleOctupole:
 
     @property
     def inc(self):
-        return acos(self.jz / sqrt(1 - self.e1 ** 2)) * 180 / pi
+        return acos(self.jz / sqrt(1 - self.e1**2)) * 180 / pi
 
     @property
     def Omega(self):
@@ -208,12 +208,12 @@ class TripleOctupole:
             self.g1 = self.initial_state['g1']
             _inc = self.initial_state['inc'] * pi / 180
 
-            CKL = self.e1 ** 2 * (
-                1 - 5 / 2.0 * sin(_inc) ** 2 * sin(self._g1) ** 2
+            CKL = self.e1**2 * (
+                1 - 5 / 2.0 * sin(_inc)**2 * sin(self._g1)**2
             )
-            self.jz = sqrt(1 - self.e1 ** 2) * cos(_inc)
+            self.jz = sqrt(1 - self.e1**2) * cos(_inc)
 
-            self._phiq = CKL + self.jz ** 2 / 2
+            self._phiq = CKL + self.jz**2 / 2
             self._chi = F(CKL) - self.epsoct * cos(self._Omega)
 
     def _deriv(self, t, y):
@@ -251,10 +251,10 @@ class TripleOctupole:
             self._step()
             if self.nstep % self.outfreq == 0:
                 self.integration_steps[
-                    self.nstep / self.outfreq
+                    self.nstep // self.outfreq
                 ] = self.state()
 
-        laststep = (self.nstep / self.outfreq) + 1
+        laststep = (self.nstep // self.outfreq) + 1
         self.integration_steps[laststep] = self.state()
 
         return self.integration_steps[: laststep + 1]
@@ -300,7 +300,7 @@ class TripleOctupole:
                 * ellipk((3 - 3 * CKL) / (3 + 2 * CKL))
                 / (4 - 11 * CKL)
                 / np.sqrt(6 + 4 * CKL)
-                / np.sqrt(1 - 1 / self.epsoct ** 2 * (F(CKL) - self.chi) ** 2)
+                / np.sqrt(1 - 1 / self.epsoct**2 * (F(CKL) - self.chi)**2)
                 / np.sqrt(2 * np.fabs(self.phiq - CKL))
             ),
             CKLmin,
@@ -356,8 +356,8 @@ class TripleOctupole:
         # $$
         # C_KL < x < C_KL + j_z^2 / 2
         # $$
-        X = np.linspace(self.CKL, self.CKL + (self.jz) ** 2 / 2.0)
-        DeltaF = np.fabs(np.array(map(F, X)) - F(self.CKL))
+        X = np.linspace(self.CKL, self.CKL + (self.jz)**2 / 2)
+        DeltaF = np.fabs(np.vectorize(F)(X) - F(self.CKL))
 
         epsoct_crit = np.max(DeltaF) / 2.0
 

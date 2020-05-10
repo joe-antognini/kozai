@@ -92,7 +92,7 @@ class TripleDelaunay:
         self.hexadecapole = False
         self.gr = False
         self.algo = 'vode'
-        self.maxoutput = 1e6
+        self.maxoutput = int(1e6)
         self.collision = False
 
         # Store the initial state
@@ -763,14 +763,14 @@ class TripleDelaunay:
             self._step()
             if self.nstep % self.outfreq == 0:
                 self.integration_steps[
-                    self.nstep / self.outfreq
+                    self.nstep // self.outfreq
                 ] = self.state()
 
             if self._a1 * (1 - self.e1) < self._r1 + self._r2:
                 self.collision = True
                 break
 
-        laststep = (self.nstep / self.outfreq) + 1
+        laststep = (self.nstep // self.outfreq) + 1
         self.integration_steps[laststep] = self.state()
 
         return self.integration_steps[: laststep + 1]
