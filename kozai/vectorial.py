@@ -270,8 +270,9 @@ class TripleVectorial:
         """The normalized quadrupole term of the Hamiltonian"""
         # fmt: off
         return (
-            2 + 3 * self.e1**2) * (1 - 3 * self.th**2
-        ) - 15 * self.e1**2 * (1 - self.th**2) * cos(2 * self._g1)
+            (2 + 3 * self.e1**2) * (1 - 3 * self.th**2) -
+            15 * self.e1**2 * (1 - self.th**2) * cos(2 * self._g1)
+        )
         # fmt: on
 
     @property
